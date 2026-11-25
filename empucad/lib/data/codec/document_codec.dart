@@ -4,6 +4,7 @@ import '../../domain/entities/document.dart';
 import '../../domain/entities/outline.dart';
 import '../../domain/entities/placement.dart';
 import '../../domain/entities/scene_node.dart';
+import '../../domain/laser/laser_models.dart';
 
 /// Versioned JSON for `.empucad` files. Decoding validates strictly and throws [FormatException]
 /// with a readable message, so a corrupt file never yields a half-built document.
@@ -16,6 +17,7 @@ abstract final class DocumentCodec {
         'version': version,
         'name': d.name,
         'nodes': [for (final n in d.roots) _node(n)],
+        'laser': _laser(d.laser),
       });
 
   static Document decode(String source) {
@@ -34,7 +36,76 @@ abstract final class DocumentCodec {
     }
     final nodes = json['nodes'];
     if (nodes is! List) throw const FormatException('Missing "nodes" list');
-    return Document(name: (json['name'] as String?) ?? 'Untitled', roots: [for (final n in nodes) _decodeNode(n, 0)]);
+    return Document(
+      name: (json['name'] as String?) ?? 'Untitled',
+      roots: [for (final n in nodes) _decodeNode(n, 0)],
+      laser: json['laser'] == null ? const LaserSetup() : _decodeLaser(json['laser']),
+    );
+  }
+
+  static Map<String, Object?> _laser(LaserSetup l) => {
+        'machine': {'bedW': l.machine.bedWidth, 'bedH': l.machine.bedHeight, 'sMax': l.machine.sMax, 'rapid': l.machine.rapid, 'dynamic': l.machine.dynamicPower},
+        'layers': [
+          for (final x in l.layers)
+            {
+              'index': x.index, 'name': x.name, 'color': x.color, 'mode': x.mode.name, 'speed': x.speed, 'power': x.power,
+              'passes': x.passes, 'interval': x.interval, 'angle': x.angle, 'bidir': x.bidirectional, 'overscan': x.overscan, 'enabled': x.enabled,
+            },
+        ],
+        'assign': l.layerOf,
+      };
+
+  static LaserSetup _decodeLaser(Object? raw) {
+    if (raw is! Map<String, dynamic>) throw const FormatException('"laser" must be an object');
+    double pos(Map<String, dynamic> m, String k, {bool allowZero = false}) {
+      final v = m[k];
+      if (v is! num || !v.isFinite || v < 0 || (!allowZero && v == 0)) throw FormatException('laser "$k" must be a positive number');
+      return v.toDouble();
+    }
+
+    final mm = raw['machine'];
+    if (mm is! Map<String, dynamic>) throw const FormatException('laser "machine" missing');
+    final machine = LaserMachine(
+      bedWidth: pos(mm, 'bedW'), bedHeight: pos(mm, 'bedH'), sMax: pos(mm, 'sMax'), rapid: pos(mm, 'rapid'), dynamicPower: mm['dynamic'] != false,
+    );
+    final rawLayers = raw['layers'];
+    if (rawLayers is! List || rawLayers.isEmpty) throw const FormatException('laser "layers" must be a non-empty list');
+    final layers = <LaserLayerSettings>[];
+    for (final l in rawLayers) {
+      if (l is! Map<String, dynamic>) throw const FormatException('laser layer must be an object');
+      final idx = l['index'];
+      if (idx is! int || idx < 0 || layers.any((x) => x.index == idx)) throw const FormatException('laser layer index must be unique and >= 0');
+      final power = pos(l, 'power', allowZero: true);
+      if (power > 100) throw const FormatException('laser power is a percentage (0-100)');
+      final passes = l['passes'];
+      if (passes is! int || passes < 1) throw const FormatException('laser "passes" must be an integer >= 1');
+      layers.add(LaserLayerSettings(
+        index: idx,
+        name: l['name'] is String ? l['name'] as String : 'Layer $idx',
+        color: l['color'] is int ? l['color'] as int : 0xFF9CA3AF,
+        mode: LaserLayerMode.values.where((m) => m.name == l['mode']).firstOrNull ?? LaserLayerMode.line,
+        speed: pos(l, 'speed'),
+        power: power,
+        passes: passes,
+        interval: pos(l, 'interval'),
+        angle: (l['angle'] is num && (l['angle'] as num).isFinite) ? (l['angle'] as num).toDouble() : 0,
+        bidirectional: l['bidir'] != false,
+        overscan: pos(l, 'overscan', allowZero: true),
+        enabled: l['enabled'] != false,
+      ));
+    }
+    final assign = raw['assign'];
+    final layerOf = <String, int>{};
+    if (assign is Map<String, dynamic>) {
+      for (final e in assign.entries) {
+        final v = e.value;
+        if (v is! int || !layers.any((x) => x.index == v)) throw FormatException('"${e.key}" is assigned to an unknown laser layer');
+        layerOf[e.key] = v;
+      }
+    } else if (assign != null) {
+      throw const FormatException('laser "assign" must be an object');
+    }
+    return LaserSetup(machine: machine, layers: layers, layerOf: layerOf);
   }
 
   static Map<String, Object?> _node(SceneNode n) {

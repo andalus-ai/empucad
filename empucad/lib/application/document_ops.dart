@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../domain/entities/document.dart';
 import '../domain/entities/placement.dart';
 import '../domain/entities/scene_node.dart';
+import '../domain/laser/laser_models.dart';
 
 /// Pure document edits. Each returns a new [Document]; none touch state, UI or the engine.
 /// The Riverpod notifier only decides *when* to call these.
@@ -65,4 +66,17 @@ abstract final class DocumentOps {
     ];
     return d.copyWith(roots: [...d.roots.sublist(0, i), ...kids, ...d.roots.sublist(i + 1)]);
   }
+
+  /// Burn these nodes on laser layer [layer]. Unknown layers are ignored.
+  static Document assignLayer(Document d, Set<String> ids, int layer) {
+    if (d.laser.layer(layer) == null || ids.isEmpty) return d;
+    final map = {...d.laser.layerOf, for (final id in ids) id: layer};
+    return d.copyWith(laser: d.laser.copyWith(layerOf: map));
+  }
+
+  static Document updateLayer(Document d, LaserLayerSettings updated) => d.copyWith(
+        laser: d.laser.copyWith(layers: [for (final l in d.laser.layers) l.index == updated.index ? updated : l]),
+      );
+
+  static Document setMachine(Document d, LaserMachine m) => d.copyWith(laser: d.laser.copyWith(machine: m));
 }

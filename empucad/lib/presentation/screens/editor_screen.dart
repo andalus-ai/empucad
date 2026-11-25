@@ -13,9 +13,11 @@ import '../state/engine_providers.dart';
 import '../state/export_service.dart';
 import '../state/scene_providers.dart';
 import '../state/selection_notifier.dart';
+import '../state/workspace_notifier.dart';
 import '../viewport/viewport.dart';
 import '../widgets/cam_panel.dart';
 import '../widgets/inspector_panel.dart';
+import '../widgets/laser_panel.dart';
 import '../widgets/shape_palette.dart';
 import '../widgets/tool_button.dart';
 
@@ -31,6 +33,8 @@ class EditorScreen extends ConsumerWidget {
     final doc = editor.document;
     final ed = ref.read(editorProvider.notifier);
     final panMode = ref.watch(panModeProvider);
+    // watched here, not inside the LayoutBuilder callback: Riverpod only allows watch during build
+    final workspace = ref.watch(workspaceProvider);
 
     void snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
@@ -89,7 +93,7 @@ class EditorScreen extends ConsumerWidget {
       ToolButton(icon: Icons.center_focus_strong, tooltip: 'Frame all', onPressed: () => ref.read(cameraProvider.notifier).frameScene(ref.read(sceneProvider).value)),
     ];
 
-    const sidebar = SingleChildScrollView(child: Column(children: [ShapePalette(), InspectorPanel(), CamPanel()]));
+    const sidebar = _Sidebar();
 
     return CallbackShortcuts(
       bindings: {
@@ -106,7 +110,25 @@ class EditorScreen extends ConsumerWidget {
         child: LayoutBuilder(builder: (context, box) {
           final wide = box.maxWidth >= _wide;
           return Scaffold(
-            appBar: AppBar(title: const Text('EmpuCAD'), actions: toolbar, toolbarHeight: 48),
+            appBar: AppBar(
+              title: Row(children: [
+                const Text('EmpuCAD'),
+                const SizedBox(width: 16),
+                SegmentedButton<Workspace>(
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                  segments: const [
+                    ButtonSegment(value: Workspace.design, label: Text('Design')),
+                    ButtonSegment(value: Workspace.cnc, label: Text('CNC')),
+                    ButtonSegment(value: Workspace.laser, label: Text('Laser')),
+                  ],
+                  selected: {workspace},
+                  onSelectionChanged: (s) => ref.read(workspaceProvider.notifier).select(s.single),
+                ),
+              ]),
+              actions: toolbar,
+              toolbarHeight: 48,
+            ),
             endDrawer: wide ? null : const Drawer(child: SafeArea(child: sidebar)),
             floatingActionButton: wide
                 ? null
@@ -121,6 +143,27 @@ class EditorScreen extends ConsumerWidget {
           );
         }),
       ),
+    );
+  }
+}
+
+/// Shape palette and inspector always; the CNC or laser panel follows the active workspace.
+class _Sidebar extends ConsumerWidget {
+  const _Sidebar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ws = ref.watch(workspaceProvider);
+    return SingleChildScrollView(
+      child: Column(children: [
+        const ShapePalette(),
+        const InspectorPanel(),
+        switch (ws) {
+          Workspace.design => const SizedBox.shrink(),
+          Workspace.cnc => const CamPanel(),
+          Workspace.laser => const LaserPanel(),
+        },
+      ]),
     );
   }
 }

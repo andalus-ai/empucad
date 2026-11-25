@@ -11,8 +11,8 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 
 | Part | State |
 |---|---|
-| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 59 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 49 tests (Dart 3.14.1) |
+| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 64 tests, `clippy` clean (Rust 1.89) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 69 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -108,17 +108,32 @@ packages/empucad_engine/
 | STL export | done |
 | CNC: profile, pocket, engrave, drill; 5 controller posts; time estimate | done (engine + panel) |
 | CNC: holding tabs, ramp entry | done (engine + CNC panel fields) |
-| Laser raster (grayscale / dither), depth-map style power | engine done and tested; **no UI yet** |
+| Laser image engraving (grayscale / dither / invert), depth-map style power | done (engine + laser workspace UI) |
 | SVG import to an extruded, editable node (`OutlineNode`) | done (engine, document, codec, CAM footprint, toolbar button, thickness field) |
-| Laser G-code planner | engine done and tested; **no UI yet** |
+| Laser layers (line / fill, passes, power, overscan), per-shape layer assignment, bed check, G-code preview | done (engine, document, laser workspace UI) |
 | CNC: V-carve, helix entry, dogbones, tool library, GRBL simulator | not started |
 | Text, STL import UI, mesh tools, align/mirror/array | not started |
 | Arc output (G2/G3) | not started (`cavalier_contours` is the candidate; offsets are polylines today) |
+
+## Laser workspace
+
+Switch with the **Design / CNC / Laser** control in the app bar.
+
+* **Layers** (name, colour, line or fill, speed, power, passes, fill gap/angle, overscan, on/off) and the
+  **machine** (bed size, S max, M3/M4) are stored in the document, so they are saved and undoable.
+* Select shapes, open a layer, **Assign selection here**. A shape with no layer uses its group's layer,
+  else layer 1. Overlapping shapes in a fill layer merge instead of cancelling.
+* **Image engraving**: load a PNG/JPEG/etc., set size and bottom-left position, power range and mode.
+  The image itself is session state and is not saved in the `.empucad` file.
+* Coordinates are machine coordinates everywhere (origin bottom-left, Y up): the Y that goes in is the Y
+  in the G-code. This is covered by Rust tests, because getting it wrong mirrors every burn.
+* A bed check warns when shapes or the image leave the bed.
 
 ## Known limits
 
 * **CAM footprints** are the base outline projected to XY: exact for shapes lying flat and for any Z rotation.
 * **Ungroup** supports groups rotated about Z only; a group tilted about X/Y is left unchanged.
+* **Laser** uses each shape's top-view footprint; layer colours are not drawn in the 3D viewport yet, and there is no text tool.
 * **Picking** is CPU ray-triangle per frame on click; fine for hundreds of thousands of triangles, not millions.
 * **`flutter_scene` is pre-1.0**; minor releases can break the API. Pin it and read its CHANGELOG.
 * The mobile save dialog is not implemented (`file_selector` has none); desktop and web only.

@@ -16,6 +16,9 @@ final exportServiceProvider = Provider<ExportService>((ref) => throw Unimplement
 abstract interface class ImportService {
   /// Returns null when the user cancelled.
   Future<String?> pickText({required List<String> extensions});
+
+  /// Returns null when the user cancelled.
+  Future<Uint8List?> pickBytes({required List<String> extensions});
 }
 
 final importServiceProvider = Provider<ImportService>((ref) => throw UnimplementedError('importServiceProvider must be overridden'));

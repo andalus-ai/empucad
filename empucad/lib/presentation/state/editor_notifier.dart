@@ -5,6 +5,7 @@ import '../../application/history.dart';
 import '../../domain/entities/document.dart';
 import '../../domain/entities/placement.dart';
 import '../../domain/entities/scene_node.dart';
+import '../../domain/laser/laser_models.dart';
 
 /// Immutable snapshot the UI watches.
 final class EditorState {
@@ -70,6 +71,10 @@ class EditorNotifier extends Notifier<EditorState> {
 
   void setOutlineHeight(String id, double height) =>
       _commit(_history.present.updateNode(id, (n) => n is OutlineNode ? n.copyWith(height: height) : n));
+
+  void assignLaserLayer(Set<String> ids, int layer) => _commit(DocumentOps.assignLayer(_history.present, ids, layer));
+  void updateLaserLayer(LaserLayerSettings l) => _commit(DocumentOps.updateLayer(_history.present, l));
+  void setLaserMachine(LaserMachine m) => _commit(DocumentOps.setMachine(_history.present, m));
 
   /// Returns the new group's id, or null if nothing was grouped.
   String? group(Set<String> ids, {GroupOp op = GroupOp.union}) {
