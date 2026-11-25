@@ -13,7 +13,7 @@ crate-type = ["cdylib", "staticlib", "lib"]
 [dependencies]
 empucad_core = { path = "crates/empucad_core", features = ["svg"] }
 # bootstrap_engine.sh pins this to the exact installed flutter_rust_bridge_codegen version.
-flutter_rust_bridge = "2"
+flutter_rust_bridge = "=2.13.0"
 
 [workspace]
 members = ["crates/empucad_core"]

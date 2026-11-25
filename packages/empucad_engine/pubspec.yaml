@@ -11,7 +11,18 @@ dependencies:
   flutter:
     sdk: flutter
   # `tool/bootstrap_engine.sh` pins this to the installed flutter_rust_bridge_codegen version.
-  flutter_rust_bridge: ^2.0.0
-  # Added by bootstrap: the cargokit-based plugin that builds ./rust for every platform.
-  rust_builder:
-    path: rust_builder
+  flutter_rust_bridge: 2.13.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        ffiPlugin: true
+      ios:
+        ffiPlugin: true
+      linux:
+        ffiPlugin: true
+      macos:
+        ffiPlugin: true
+      windows:
+        ffiPlugin: true

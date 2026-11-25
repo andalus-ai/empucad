@@ -1,7 +1,33 @@
+# Dart and Flutter generated files
 .dart_tool/
-build/
 .flutter-plugins*
+**/.flutter-plugins-dependencies
+build/
+**/build/
 pubspec.lock
-packages/empucad_engine/rust/target/
+
+# Rust build output
+**/target/
+
+# IDE and OS files
 *.iml
 .idea/
+.DS_Store
+
+# Compiled binaries and debug symbols
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
+*.exe
+*.class
+*.pyc
+*.pyo
+*.dSYM/
+*.xcarchive/
+*.profraw
+
+# Generated archives and logs
+*.log
