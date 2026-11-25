@@ -1,0 +1,17 @@
+name: empucad_engine
+description: Rust geometry, CAM and G-code engine for EmpuCAD, exposed to Flutter through flutter_rust_bridge.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.9.0
+  flutter: ">=3.47.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # `tool/bootstrap_engine.sh` pins this to the installed flutter_rust_bridge_codegen version.
+  flutter_rust_bridge: ^2.0.0
+  # Added by bootstrap: the cargokit-based plugin that builds ./rust for every platform.
+  rust_builder:
+    path: rust_builder

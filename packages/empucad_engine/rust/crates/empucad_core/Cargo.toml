@@ -1,0 +1,24 @@
+[package]
+name = "empucad_core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+description = "Pure-Rust geometry, CAM and G-code engine for EmpuCAD (no Flutter dependency)"
+license = "Apache-2.0"
+
+[dependencies]
+i_overlay = "6"
+manifold-csg = "0.3"
+thiserror = "2"
+svg2gcode = { version = "0.3.4", optional = true }
+g-code = { version = "0.6", optional = true }
+roxmltree = { version = "0.21", optional = true }
+usvg = { version = "0.50", default-features = false, optional = true }
+
+[dev-dependencies]
+approx = "0.5"
+
+[features]
+default = []
+# Existing Rust SVG -> G-code converter (pen plotter / laser fast path).
+svg = ["dep:svg2gcode", "dep:g-code", "dep:roxmltree", "dep:usvg"]

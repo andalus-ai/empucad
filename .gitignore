@@ -1,0 +1,7 @@
+.dart_tool/
+build/
+.flutter-plugins*
+pubspec.lock
+packages/empucad_engine/rust/target/
+*.iml
+.idea/

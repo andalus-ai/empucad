@@ -1,0 +1,28 @@
+# The Flutter plugin crate. flutter_rust_bridge_codegen reads `src/api/**` and generates
+# `src/frb_generated.rs` plus the Dart bindings. All real logic lives in `crates/empucad_core`.
+[package]
+name = "empucad_engine"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.88"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+
+[dependencies]
+empucad_core = { path = "crates/empucad_core", features = ["svg"] }
+# bootstrap_engine.sh pins this to the exact installed flutter_rust_bridge_codegen version.
+flutter_rust_bridge = "2"
+
+[workspace]
+members = ["crates/empucad_core"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

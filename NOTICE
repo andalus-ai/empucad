@@ -1,0 +1,24 @@
+EmpuCAD
+Copyright 2026 EmpuCAD contributors
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+EmpuCAD is a derivative work: a Flutter / Rust re-implementation of DabbleCAD
+(https://github.com/DJMcNewgent/DabbleCAD), Copyright 2026 DJMcNewgent, which is licensed under the
+Apache License, Version 2.0. The design (document model, boolean grouping semantics, CAM concepts,
+G-code post-processor set, laser layer model) follows that project.
+
+Changes from DabbleCAD: rewritten from JavaScript/Electron/Three.js to Dart/Flutter with a Rust
+engine; new architecture (layered, Riverpod, no code generation); renamed. EmpuCAD is an
+independent project and is not affiliated with or endorsed by DabbleCAD's author.
+
+Rust crates used by the engine (licenses read from each crate's Cargo.toml):
+  manifold-csg / manifold-csg-sys  Apache-2.0 OR MIT   (bindings to the Manifold geometry kernel)
+  i_overlay                        MIT OR Apache-2.0   (2D polygon boolean and offset)
+  svg2gcode                        MIT                 (SVG to G-code conversion)
+  g-code                           MIT OR Apache-2.0
+  roxmltree                        MIT OR Apache-2.0
+  usvg                             Apache-2.0 OR MIT   (SVG parsing for import)
+  tiny-skia-path                   BSD-3-Clause        (via usvg)
+  thiserror                        MIT OR Apache-2.0
+Run `cargo license` in packages/empucad_engine/rust for the full transitive list before releasing.

@@ -1,0 +1,24 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y cmake
+      - run: cargo test --workspace
+        working-directory: packages/empucad_engine/rust
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: packages/empucad_engine/rust
+  dart-pure:
+    # domain / application / codec / camera tests need no Flutter and no Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+      - run: |
+          mkdir /tmp/pure && cp -r lib test /tmp/pure/ && cd /tmp/pure
+          printf 'name: empucad\nenvironment:\n  sdk: ^3.9.0\ndev_dependencies:\n  test: ^1.25.0\n' > pubspec.yaml
+          rm -rf lib/presentation/state lib/presentation/widgets lib/presentation/screens lib/presentation/viewport/*renderer.dart lib/presentation/viewport/viewport.dart lib/data/engine lib/data/storage/file_selector_export_service.dart lib/main.dart lib/app.dart
+          dart pub get && dart analyze lib test && dart test
