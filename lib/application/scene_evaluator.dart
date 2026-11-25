@@ -91,6 +91,16 @@ final class SceneEvaluator {
         // Placement.z is the bottom of the shape: lift the centred primitive by half its height.
         final m = node.placement.toMatrix() * Mat4.translation(0, 0, node.height / 2);
         return [_Part(node.id, await _engine.transform(raw, m), node.isHole)];
+      case OutlineNode():
+        try {
+          final meshes = [for (final sh in node.shapes) await _engine.extrude(sh.outlines, node.height)];
+          final one = meshes.length == 1 ? meshes.single : await _engine.boolean(solids: meshes, holes: const [], mode: BooleanMode.union);
+          // extrusion spans z = 0..height from the placement, so no lift is needed
+          return [_Part(node.id, await _engine.transform(one, node.placement.toMatrix()), node.isHole)];
+        } on EngineFailure catch (e) {
+          _warnings.add('"${node.name}": ${e.message}. Skipped.');
+          return const [];
+        }
       case GroupNode():
         final kids = <_Part>[];
         for (final c in node.children) {

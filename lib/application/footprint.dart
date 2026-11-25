@@ -22,6 +22,18 @@ abstract final class Footprint {
       switch (n) {
         case ShapeNode():
           if (sel) out.add(ShapeOutlines([_outline(n, m)]));
+        case OutlineNode():
+          if (sel) {
+            out.add(ShapeOutlines([
+              for (final o in n.shapes.expand((s) => s.outlines))
+                Outline([
+                  for (var i = 0; i + 1 < o.points.length; i += 2) ...() {
+                    final p = m.transformPoint(o.points[i], o.points[i + 1], 0);
+                    return [p.x, p.y];
+                  }(),
+                ], closed: o.closed),
+            ]));
+          }
         case GroupNode():
           for (final c in n.children) {
             walk(c, m, sel);

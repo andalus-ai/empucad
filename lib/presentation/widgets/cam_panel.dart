@@ -49,6 +49,19 @@ class CamPanel extends ConsumerWidget {
           Expanded(child: NumberField(label: 'Per pass', value: cam.stepDown, min: 0.05, onCommit: n.setStepDown)),
         ]),
         gap(),
+        Row(children: [
+          Expanded(child: NumberField(label: 'Ramp', value: cam.rampLength, min: 0, onCommit: n.setRamp)),
+          const SizedBox(width: 6),
+          if (cam.kind == CamOperationKind.profileOutside || cam.kind == CamOperationKind.profileInside || cam.kind == CamOperationKind.profileOn)
+            Expanded(child: NumberField(label: 'Tabs', value: cam.tabCount.toDouble(), min: 0, suffix: '', onCommit: (v) => n.setTabCount(v.round()))),
+          if (cam.tabCount > 0) ...[
+            const SizedBox(width: 6),
+            Expanded(child: NumberField(label: 'Tab width', value: cam.tabWidth, min: 0.1, onCommit: n.setTabWidth)),
+            const SizedBox(width: 6),
+            Expanded(child: NumberField(label: 'Tab high', value: cam.tabHeight, min: 0.1, onCommit: n.setTabHeight)),
+          ],
+        ]),
+        gap(),
         if (posts.isNotEmpty)
           DropdownButtonFormField<String>(
             initialValue: posts.any((p) => p.id == cam.settings.postId) ? cam.settings.postId : posts.first.id,

@@ -28,6 +28,11 @@ class EditorNotifier extends Notifier<EditorState> {
 
   String _newId() => 'n${++_seq}';
 
+  /// A fresh node id (for nodes built outside the notifier, e.g. SVG imports).
+  String nextId() => _newId();
+
+  void addNode(SceneNode node) => _commit(DocumentOps.add(_history.present, node));
+
   void _commit(Document d) {
     _history.push(d);
     state = _snapshot();
@@ -62,6 +67,9 @@ class EditorNotifier extends Notifier<EditorState> {
     });
     _commit(d);
   }
+
+  void setOutlineHeight(String id, double height) =>
+      _commit(_history.present.updateNode(id, (n) => n is OutlineNode ? n.copyWith(height: height) : n));
 
   /// Returns the new group's id, or null if nothing was grouped.
   String? group(Set<String> ids, {GroupOp op = GroupOp.union}) {

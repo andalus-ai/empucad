@@ -1,19 +1,10 @@
 import 'dart:typed_data';
 
+import '../entities/outline.dart';
+
+export '../entities/outline.dart';
+
 enum CamOperationKind { profileOutside, profileInside, profileOn, pocket, engrave, drill }
-
-/// Flat x,y pairs in mm.
-final class Outline {
-  const Outline(this.points, {this.closed = true});
-  final List<double> points;
-  final bool closed;
-}
-
-/// The outlines of one design shape (outer ring + holes). Separate shapes are unioned.
-final class ShapeOutlines {
-  const ShapeOutlines(this.outlines);
-  final List<Outline> outlines;
-}
 
 final class CamOperation {
   const CamOperation({
@@ -29,15 +20,37 @@ final class CamOperation {
     this.feed = 800,
     this.plunge = 300,
     this.rpm = 12000,
+    this.tabCount = 0,
+    this.tabWidth = 6.0,
+    this.tabHeight = 1.0,
+    this.rampLength = 0.0,
   });
   final String name;
   final CamOperationKind kind;
   final List<ShapeOutlines> shapes;
   final int toolNumber;
   final double toolDiameter, depth, stepDown, stepOver, feed, plunge, rpm;
+
+  /// Holding tabs (profiles only); 0 = none. Width is along the tool-centre path.
+  final int tabCount;
+  final double tabWidth, tabHeight;
+
+  /// Descend along the path over this length instead of plunging; 0 = plunge.
+  final double rampLength;
   final bool climb;
 
-  CamOperation copyWith({CamOperationKind? kind, List<ShapeOutlines>? shapes, double? toolDiameter, double? depth, double? stepDown}) => CamOperation(
+  CamOperation copyWith({
+    CamOperationKind? kind,
+    List<ShapeOutlines>? shapes,
+    double? toolDiameter,
+    double? depth,
+    double? stepDown,
+    int? tabCount,
+    double? tabWidth,
+    double? tabHeight,
+    double? rampLength,
+  }) =>
+      CamOperation(
         name: name,
         kind: kind ?? this.kind,
         shapes: shapes ?? this.shapes,
@@ -50,6 +63,10 @@ final class CamOperation {
         feed: feed,
         plunge: plunge,
         rpm: rpm,
+        tabCount: tabCount ?? this.tabCount,
+        tabWidth: tabWidth ?? this.tabWidth,
+        tabHeight: tabHeight ?? this.tabHeight,
+        rampLength: rampLength ?? this.rampLength,
       );
 }
 

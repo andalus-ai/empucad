@@ -1,3 +1,4 @@
+import 'outline.dart';
 import 'placement.dart';
 
 enum ShapeKind { box, cylinder, sphere, cone }
@@ -117,4 +118,49 @@ final class GroupNode extends SceneNode {
 
   @override
   String get geometryKey => 'G(${op.name},${placement.key},$isHole,[${children.map((c) => c.geometryKey).join(';')}])';
+}
+
+/// Imported 2D geometry (e.g. from an SVG) extruded `height` mm up from its placement.
+/// Each [ShapeOutlines] is one region; shapes are unioned into a single solid.
+final class OutlineNode extends SceneNode {
+  OutlineNode({
+    required super.id,
+    required super.name,
+    required this.shapes,
+    required this.height,
+    super.placement = Placement.origin,
+    super.isHole = false,
+    super.color = 0xFFF59E0B,
+  });
+
+  final List<ShapeOutlines> shapes;
+  final double height;
+
+  // Cheap content fingerprint so identical outlines share a cache entry and edited ones do not.
+  late final int _fingerprint = Object.hashAll([
+    for (final s in shapes)
+      for (final o in s.outlines) ...[o.closed, ...o.points],
+  ]);
+
+  OutlineNode copyWith({String? name, double? height, Placement? placement, bool? isHole, int? color}) => OutlineNode(
+        id: id,
+        name: name ?? this.name,
+        shapes: shapes,
+        height: height ?? this.height,
+        placement: placement ?? this.placement,
+        isHole: isHole ?? this.isHole,
+        color: color ?? this.color,
+      );
+
+  @override
+  OutlineNode withPlacement(Placement p) => copyWith(placement: p);
+  @override
+  OutlineNode withName(String n) => copyWith(name: n);
+  @override
+  OutlineNode withHole(bool h) => copyWith(isHole: h);
+  @override
+  OutlineNode withColor(int c) => copyWith(color: c);
+
+  @override
+  String get geometryKey => 'O($height,${placement.key},$isHole,$_fingerprint,${shapes.length})';
 }

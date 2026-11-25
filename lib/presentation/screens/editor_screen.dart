@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/codec/document_codec.dart';
 import '../../domain/entities/scene_node.dart';
+import '../../domain/ports/geometry_engine.dart';
 import '../state/editor_notifier.dart';
 import '../state/engine_providers.dart';
 import '../state/export_service.dart';
@@ -38,6 +39,8 @@ class EditorScreen extends ConsumerWidget {
         await body();
       } on FormatException catch (e) {
         snack(e.message);
+      } on EngineFailure catch (e) {
+        snack(e.message);
       } catch (e) {
         snack('$e');
       }
@@ -56,6 +59,14 @@ class EditorScreen extends ConsumerWidget {
               extension: 'empucad',
               bytes: Uint8List.fromList(utf8.encode(DocumentCodec.encode(doc))),
             );
+      })),
+      ToolButton(icon: Icons.draw_outlined, tooltip: 'Import SVG…', onPressed: () => guarded(() async {
+        final text = await ref.read(importServiceProvider).pickText(extensions: const ['svg']);
+        if (text == null) return;
+        final node = await ref.read(importSvgProvider)(text, id: ed.nextId(), name: 'SVG');
+        ed.addNode(node);
+        ref.read(selectionProvider.notifier).select(node.id);
+        ref.read(cameraProvider.notifier).frameScene(ref.read(sceneProvider).value);
       })),
       ToolButton(icon: Icons.view_in_ar, tooltip: 'Export STL…', onPressed: doc.roots.isEmpty ? null : () => guarded(() async {
         final bytes = await ref.read(exportStlProvider)(doc);

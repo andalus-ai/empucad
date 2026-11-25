@@ -12,9 +12,10 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 | Part | State |
 |---|---|
 | Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 59 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 40 tests (Dart 3.14.1) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 49 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
-| `data/engine/*` adapters, `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
+| `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
+| `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
 | `flutter_scene` renderer | Written against the `flutter_scene` source on GitHub (main, 0.24.x), never run. |
 
 The Dart tests were executed with a tiny stand-in for `package:test` (pub.dev unreachable); they use only
@@ -106,9 +107,9 @@ packages/empucad_engine/
 | Save/open | done, own `.empucad` JSON (DabbleCAD files are not imported yet) |
 | STL export | done |
 | CNC: profile, pocket, engrave, drill; 5 controller posts; time estimate | done (engine + panel) |
-| CNC: holding tabs, ramp entry | engine done and tested; **no UI fields yet** |
+| CNC: holding tabs, ramp entry | done (engine + CNC panel fields) |
 | Laser raster (grayscale / dither), depth-map style power | engine done and tested; **no UI yet** |
-| SVG import, extrude outline to solid | engine done and tested; **no UI / document node yet** |
+| SVG import to an extruded, editable node (`OutlineNode`) | done (engine, document, codec, CAM footprint, toolbar button, thickness field) |
 | Laser G-code planner | engine done and tested; **no UI yet** |
 | CNC: V-carve, helix entry, dogbones, tool library, GRBL simulator | not started |
 | Text, STL import UI, mesh tools, align/mirror/array | not started |

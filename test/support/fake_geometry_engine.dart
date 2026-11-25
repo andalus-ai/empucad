@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:empucad/core/math/mat4.dart';
+import 'package:empucad/domain/entities/outline.dart';
 import 'package:empucad/domain/entities/scene_node.dart';
 import 'package:empucad/domain/ports/geometry_engine.dart';
 
@@ -29,6 +30,30 @@ final class FakeGeometryEngine implements GeometryEngine {
     final p = <double>[];
     for (final c in _corners) {
       p..add(c[0] * width / 2)..add(c[1] * depth / 2)..add(c[2] * height / 2);
+    }
+    return MeshData(Float32List.fromList(p), Uint32List.fromList(_tris));
+  }
+
+  int extrudeCalls = 0;
+
+  /// Extrudes the bounding box of the closed outlines (enough to check placement and plumbing).
+  @override
+  Future<MeshData> extrude(List<Outline> outlines, double height) async {
+    extrudeCalls++;
+    final closed = outlines.where((o) => o.closed && o.points.length >= 6).toList();
+    if (closed.isEmpty) throw const InvalidInputFailure('no closed outline to extrude');
+    var lox = double.infinity, loy = double.infinity, hix = -double.infinity, hiy = -double.infinity;
+    for (final o in closed) {
+      for (var i = 0; i + 1 < o.points.length; i += 2) {
+        lox = lox < o.points[i] ? lox : o.points[i];
+        hix = hix > o.points[i] ? hix : o.points[i];
+        loy = loy < o.points[i + 1] ? loy : o.points[i + 1];
+        hiy = hiy > o.points[i + 1] ? hiy : o.points[i + 1];
+      }
+    }
+    final p = <double>[];
+    for (final c in _corners) {
+      p..add(c[0] < 0 ? lox : hix)..add(c[1] < 0 ? loy : hiy)..add(c[2] < 0 ? 0 : height);
     }
     return MeshData(Float32List.fromList(p), Uint32List.fromList(_tris));
   }

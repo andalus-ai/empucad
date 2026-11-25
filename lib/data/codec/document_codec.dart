@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../domain/entities/document.dart';
+import '../../domain/entities/outline.dart';
 import '../../domain/entities/placement.dart';
 import '../../domain/entities/scene_node.dart';
 
@@ -47,6 +48,17 @@ abstract final class DocumentCodec {
     };
     return switch (n) {
       ShapeNode() => {'type': 'shape', 'kind': n.kind.name, 'size': [n.width, n.depth, n.height], ...base},
+      OutlineNode() => {
+          'type': 'outline',
+          'height': n.height,
+          'shapes': [
+            for (final sh in n.shapes)
+              [
+                for (final o in sh.outlines) {'closed': o.closed, 'pts': o.points},
+              ],
+          ],
+          ...base,
+        },
       GroupNode() => {'type': 'group', 'op': n.op.name, 'children': [for (final c in n.children) _node(c)], ...base},
     };
   }
@@ -67,6 +79,26 @@ abstract final class DocumentCodec {
         final s = _nums(raw, 'size', 3);
         if (s.any((v) => v <= 0)) throw FormatException('Shape $id has a non-positive size');
         return ShapeNode(id: id, name: name, kind: kind, width: s[0], depth: s[1], height: s[2], placement: placement, isHole: hole, color: color);
+      case 'outline':
+        final h = raw['height'];
+        if (h is! num || !h.isFinite || h <= 0) throw FormatException('Outline $id has an invalid height');
+        final rawShapes = raw['shapes'];
+        if (rawShapes is! List) throw FormatException('Outline $id has no shapes');
+        final shapes = <ShapeOutlines>[];
+        for (final sh in rawShapes) {
+          if (sh is! List) throw FormatException('Outline $id: a shape must be a list of outlines');
+          final outlines = <Outline>[];
+          for (final o in sh) {
+            if (o is! Map<String, dynamic>) throw FormatException('Outline $id: bad outline');
+            final pts = o['pts'];
+            if (pts is! List || pts.length.isOdd || pts.any((e) => e is! num || !e.isFinite)) {
+              throw FormatException('Outline $id: points must be finite x,y pairs');
+            }
+            outlines.add(Outline([for (final e in pts) (e as num).toDouble()], closed: o['closed'] != false));
+          }
+          shapes.add(ShapeOutlines(outlines));
+        }
+        return OutlineNode(id: id, name: name, shapes: shapes, height: h.toDouble(), placement: placement, isHole: hole, color: color);
       case 'group':
         final op = GroupOp.values.where((o) => o.name == raw['op']).firstOrNull ?? GroupOp.union;
         final kids = raw['children'];

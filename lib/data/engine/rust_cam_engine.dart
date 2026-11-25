@@ -1,8 +1,7 @@
-import 'dart:typed_data';
-
 import 'package:empucad_engine/empucad_engine.dart' as rust;
 
 import '../../domain/ports/cam_engine.dart';
+import 'outline_mapping.dart';
 
 /// [CamEngine] backed by the Rust plugin: toolpaths from `empucad_core::cam`, G-code from its posts.
 final class RustCamEngine implements CamEngine {
@@ -43,10 +42,7 @@ final class RustCamEngine implements CamEngine {
           CamOperationKind.engrave => rust.ToolpathKind.engrave,
           CamOperationKind.drill => rust.ToolpathKind.drill,
         },
-        shapes: [
-          for (final s in o.shapes)
-            rust.ShapeOutlines(outlines: [for (final l in s.outlines) rust.Outline(points: Float64List.fromList(l.points), closed: l.closed)]),
-        ],
+        shapes: [for (final s in o.shapes) OutlineMapping.shapeToRust(s)],
         depth: o.depth,
         stepDown: o.stepDown,
         stepOver: o.stepOver,
@@ -54,5 +50,9 @@ final class RustCamEngine implements CamEngine {
         feed: o.feed,
         plunge: o.plunge,
         rpm: o.rpm,
+        tabCount: o.tabCount,
+        tabWidth: o.tabWidth,
+        tabHeight: o.tabHeight,
+        rampLength: o.rampLength,
       );
 }

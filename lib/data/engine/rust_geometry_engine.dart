@@ -3,8 +3,10 @@ import 'dart:typed_data';
 import 'package:empucad_engine/empucad_engine.dart' as rust;
 
 import '../../core/math/mat4.dart';
+import '../../domain/entities/outline.dart';
 import '../../domain/entities/scene_node.dart';
 import '../../domain/ports/geometry_engine.dart';
+import 'outline_mapping.dart';
 
 /// [GeometryEngine] backed by the Rust/Manifold plugin (`packages/empucad_engine`).
 ///
@@ -35,6 +37,12 @@ final class RustGeometryEngine implements GeometryEngine {
           mode: mode == BooleanMode.union ? rust.BoolMode.union : rust.BoolMode.intersect,
         );
         return _fromRust(out);
+      });
+
+  @override
+  Future<MeshData> extrude(List<Outline> outlines, double height) => _guard(() async {
+        final m = await rust.extrudeOutlines(outlines: [for (final o in outlines) OutlineMapping.toRust(o)], height: height);
+        return _fromRust(m);
       });
 
   @override

@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../../core/math/mat4.dart';
+import '../entities/outline.dart';
 import '../entities/scene_node.dart';
 
 /// Indexed triangle mesh in millimetres, Z-up. Same layout the Rust engine uses.
@@ -47,6 +48,9 @@ abstract interface class GeometryEngine {
 
   /// Combine `solids` (union or intersection), then subtract the union of `holes`.
   Future<MeshData> boolean({required List<MeshData> solids, required List<MeshData> holes, required BooleanMode mode});
+
+  /// Extrude one shape's outlines from z = 0 up to `height`. Nested outlines become holes.
+  Future<MeshData> extrude(List<Outline> outlines, double height);
 
   Future<MeshData> transform(MeshData mesh, Mat4 matrix);
   Future<SolidReport> inspect(MeshData mesh);

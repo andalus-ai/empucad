@@ -46,6 +46,8 @@ class InspectorPanel extends ConsumerWidget {
             row([NumberField(label: 'Diameter', value: node.width, min: 0.01, onCommit: (v) => ed.resize(node.id, width: v))]),
           row([NumberField(label: 'Height', value: node.height, min: 0.01, onCommit: (v) => ed.resize(node.id, height: v))]),
         ],
+        if (node is OutlineNode)
+          row([NumberField(label: 'Thickness', value: node.height, min: 0.01, onCommit: (v) => ed.setOutlineHeight(node.id, v))]),
         row([
           NumberField(label: 'X', value: p.x, onCommit: (v) => ed.setPlacement(node.id, p.copyWith(x: v))),
           NumberField(label: 'Y', value: p.y, onCommit: (v) => ed.setPlacement(node.id, p.copyWith(y: v))),
