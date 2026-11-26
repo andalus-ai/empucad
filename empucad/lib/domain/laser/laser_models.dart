@@ -90,7 +90,7 @@ final class LaserMachine {
 
 /// Machine, layers and which design node burns on which layer. Lives in the [Document].
 final class LaserSetup {
-  const LaserSetup({this.machine = const LaserMachine(), this.layers = defaultLayers, this.layerOf = const {}});
+  const LaserSetup({this.machine = const LaserMachine(), this.layers = defaultLayers, this.layerOf = const {}, this.raster});
 
   static const defaultLayers = <LaserLayerSettings>[
     LaserLayerSettings(index: 0, name: 'Cut', color: 0xFFEF4444, speed: 6, power: 90),
@@ -106,8 +106,16 @@ final class LaserSetup {
   /// Node id -> layer index. A node without an entry burns on layer 0 (or its nearest group's layer).
   final Map<String, int> layerOf;
 
-  LaserSetup copyWith({LaserMachine? machine, List<LaserLayerSettings>? layers, Map<String, int>? layerOf}) =>
-      LaserSetup(machine: machine ?? this.machine, layers: layers ?? this.layers, layerOf: layerOf ?? this.layerOf);
+  /// The image to engrave, if one is loaded.
+  final RasterAsset? raster;
+
+  LaserSetup copyWith({LaserMachine? machine, List<LaserLayerSettings>? layers, Map<String, int>? layerOf, RasterAsset? raster, bool clearRaster = false}) =>
+      LaserSetup(
+        machine: machine ?? this.machine,
+        layers: layers ?? this.layers,
+        layerOf: layerOf ?? this.layerOf,
+        raster: clearRaster ? null : (raster ?? this.raster),
+      );
 
   LaserLayerSettings? layer(int index) {
     for (final l in layers) {
@@ -186,6 +194,16 @@ final class RasterSettings {
         invert: invert ?? this.invert,
         mode: mode ?? this.mode,
       );
+}
+
+/// The image to engrave, with how to burn it. Lives in the [LaserSetup] so it is saved with the design.
+final class RasterAsset {
+  const RasterAsset({required this.name, required this.image, required this.settings});
+  final String name;
+  final RasterImage image;
+  final RasterSettings settings;
+
+  RasterAsset withSettings(RasterSettings s) => RasterAsset(name: name, image: image, settings: s);
 }
 
 /// What the engine returns for a laser job.

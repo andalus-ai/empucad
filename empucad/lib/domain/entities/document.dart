@@ -1,15 +1,17 @@
+import '../cnc/tool_library.dart';
 import '../laser/laser_models.dart';
 import 'scene_node.dart';
 
 /// The whole design: an ordered forest of nodes. Immutable; edits return a new [Document].
 final class Document {
-  const Document({this.name = 'Untitled', this.roots = const [], this.laser = const LaserSetup()});
+  const Document({this.name = 'Untitled', this.roots = const [], this.laser = const LaserSetup(), this.tools = const ToolLibrary()});
   final String name;
   final List<SceneNode> roots;
   final LaserSetup laser;
+  final ToolLibrary tools;
 
-  Document copyWith({String? name, List<SceneNode>? roots, LaserSetup? laser}) =>
-      Document(name: name ?? this.name, roots: roots ?? this.roots, laser: laser ?? this.laser);
+  Document copyWith({String? name, List<SceneNode>? roots, LaserSetup? laser, ToolLibrary? tools}) =>
+      Document(name: name ?? this.name, roots: roots ?? this.roots, laser: laser ?? this.laser, tools: tools ?? this.tools);
 
   SceneNode? find(String id) => _find(roots, id);
 

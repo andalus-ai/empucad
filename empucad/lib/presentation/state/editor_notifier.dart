@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../application/document_ops.dart';
 import '../../application/history.dart';
+import '../../domain/cnc/tool_library.dart';
 import '../../domain/entities/document.dart';
 import '../../domain/entities/placement.dart';
 import '../../domain/entities/scene_node.dart';
@@ -74,6 +75,23 @@ class EditorNotifier extends Notifier<EditorState> {
 
   void assignLaserLayer(Set<String> ids, int layer) => _commit(DocumentOps.assignLayer(_history.present, ids, layer));
   void updateLaserLayer(LaserLayerSettings l) => _commit(DocumentOps.updateLayer(_history.present, l));
+  void updateTool(CncTool t) => _commit(DocumentOps.updateTool(_history.present, t));
+  void removeTool(String id) => _commit(DocumentOps.removeTool(_history.present, id));
+
+  /// Adds a copy of [from] (same speeds) under a fresh id and returns that id.
+  String duplicateTool(CncTool from) {
+    var n = _history.present.tools.tools.length + 1;
+    while (_history.present.tools.find('t$n') != null) {
+      n++;
+    }
+    final id = 't$n';
+    _commit(DocumentOps.addTool(_history.present, CncTool(id: id, name: '${from.name} copy', kind: from.kind, diameter: from.diameter, feed: from.feed, plunge: from.plunge, rpm: from.rpm, angle: from.angle)));
+    return id;
+  }
+
+  void setRaster(RasterAsset a) => _commit(DocumentOps.setRaster(_history.present, a));
+  void updateRasterSettings(RasterSettings s) => _commit(DocumentOps.updateRasterSettings(_history.present, s));
+  void clearRaster() => _commit(DocumentOps.clearRaster(_history.present));
   void setLaserMachine(LaserMachine m) => _commit(DocumentOps.setMachine(_history.present, m));
 
   /// Returns the new group's id, or null if nothing was grouped.

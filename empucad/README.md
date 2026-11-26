@@ -12,7 +12,7 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 | Part | State |
 |---|---|
 | Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 81 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 71 tests (Dart 3.14.1) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 106 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -119,7 +119,8 @@ packages/empucad_engine/
 | SVG import to an extruded, editable node (`OutlineNode`) | done (engine, document, codec, CAM footprint, toolbar button, thickness field) |
 | Laser layers (line / fill, passes, power, overscan), per-shape layer assignment, bed check, G-code preview | done (engine, document, laser workspace UI) |
 | CNC: V-carve | done as a contour-parallel approximation (see below); not a medial-axis V-carve |
-| CNC: helix entry, dogbones, tool library, GRBL simulator | not started |
+| CNC tool library (end mill, ball nose, V-bit, drill; feed, plunge, rpm, angle; saved in the file) | done; operations only offer tools that suit them |
+| CNC: helix entry, dogbones, GRBL simulator | not started |
 | Text, STL import UI, mesh tools, align/mirror/array | not started |
 | Arc output (G2/G3) | done as an opt-in fit: runs of short cuts on a circle become one arc (planar only, tolerance 0.005 mm); true arc-preserving offsets (`cavalier_contours`) are still future work |
 
@@ -132,10 +133,19 @@ Switch with the **Design / CNC / Laser** control in the app bar.
 * Select shapes, open a layer, **Assign selection here**. A shape with no layer uses its group's layer,
   else layer 1. Overlapping shapes in a fill layer merge instead of cancelling.
 * **Image engraving**: load a PNG/JPEG/etc., set size and bottom-left position, power range and mode.
-  The image itself is session state and is not saved in the `.empucad` file.
+  The image (downscaled to at most 2000 px) and its settings are saved in the `.empucad` file, run-length
+  encoded, so they reopen with the design and are covered by undo.
 * Coordinates are machine coordinates everywhere (origin bottom-left, Y up): the Y that goes in is the Y
   in the G-code. This is covered by Rust tests, because getting it wrong mirrors every burn.
 * A bed check warns when shapes or the image leave the bed.
+
+## Tools
+
+The CNC panel picks a tool from the design's tool library (stored in the `.empucad` file; position in the
+list is the controller tool number, `T1`, `T2`, ...). Only tools that suit the chosen operation are
+offered: V-carve needs a V-bit, cutting out and pocketing need an end mill or ball nose, drilling needs a
+drill or end mill, and engraving takes anything but a drill. Edit a tool's diameter, angle, feed, plunge
+and spindle speed in place, or duplicate it for a new material.
 
 ## V-carve
 

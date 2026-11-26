@@ -16,38 +16,36 @@ final generateLaserJobProvider = Provider<GenerateLaserJob>((ref) => GenerateLas
 final generateRasterJobProvider = Provider<GenerateRasterJob>((ref) => GenerateRasterJob(ref.watch(laserEngineProvider)));
 
 final class LaserState {
-  const LaserState({
-    this.image,
-    this.imageName,
-    this.raster = const RasterSettings(),
-    this.result = const AsyncData<LaserResult?>(null),
-  });
-  final RasterImage? image;
-  final String? imageName;
-  final RasterSettings raster;
+  const LaserState({this.result = const AsyncData<LaserResult?>(null)});
   final AsyncValue<LaserResult?> result;
-
-  LaserState copyWith({RasterImage? image, String? imageName, RasterSettings? raster, AsyncValue<LaserResult?>? result}) =>
-      LaserState(image: image ?? this.image, imageName: imageName ?? this.imageName, raster: raster ?? this.raster, result: result ?? this.result);
+  LaserState copyWith({AsyncValue<LaserResult?>? result}) => LaserState(result: result ?? this.result);
 }
 
-/// Session state for the laser workspace. Layers, machine and layer assignments are NOT here: they
-/// live in the document (saved, undoable). Only the loaded image and the last result are transient.
+/// Session state for the laser workspace: only the last generated job. Layers, machine, layer
+/// assignments and the engraving image (with its settings) live in the document, so they are saved
+/// and undoable.
 class LaserNotifier extends Notifier<LaserState> {
   @override
   LaserState build() => const LaserState();
 
-  void setRaster(RasterSettings s) => state = state.copyWith(raster: s);
+  void setRaster(RasterSettings s) => ref.read(editorProvider.notifier).updateRasterSettings(s);
 
   Future<void> loadImage() async {
     try {
       final bytes = await ref.read(importServiceProvider).pickBytes(extensions: const ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']);
       if (bytes == null) return;
       final image = await ref.read(imageDecoderProvider).decode(bytes);
-      state = state.copyWith(image: image, imageName: 'image ${image.width}x${image.height}', result: const AsyncData<LaserResult?>(null));
+      final previous = ref.read(documentProvider).laser.raster?.settings;
+      ref.read(editorProvider.notifier).setRaster(RasterAsset(name: 'image ${image.width}x${image.height}', image: image, settings: previous ?? const RasterSettings()));
+      state = state.copyWith(result: const AsyncData<LaserResult?>(null));
     } catch (e, st) {
       state = state.copyWith(result: AsyncError(const LaserFailure('That file could not be read as an image.'), st));
     }
+  }
+
+  void removeImage() {
+    ref.read(editorProvider.notifier).clearRaster();
+    state = state.copyWith(result: const AsyncData<LaserResult?>(null));
   }
 
   Future<void> generateLayers() => _run(() {
@@ -57,9 +55,10 @@ class LaserNotifier extends Notifier<LaserState> {
       });
 
   Future<void> generateImage() => _run(() {
-        final image = state.image;
-        if (image == null) throw const LaserFailure('Load an image first.');
-        return ref.read(generateRasterJobProvider)(image, state.raster, ref.read(documentProvider).laser.machine);
+        final doc = ref.read(documentProvider);
+        final asset = doc.laser.raster;
+        if (asset == null) throw const LaserFailure('Load an image first.');
+        return ref.read(generateRasterJobProvider)(asset.image, asset.settings, doc.laser.machine);
       });
 
   Future<void> _run(Future<LaserResult> Function() job) async {

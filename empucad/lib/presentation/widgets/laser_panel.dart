@@ -138,16 +138,18 @@ class _ImageSection extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final st = ref.watch(laserProvider);
+    final asset = ref.watch(documentProvider.select((d) => d.laser.raster));
+    final loading = ref.watch(laserProvider.select((s) => s.result.isLoading));
     final n = ref.read(laserProvider.notifier);
-    final r = st.raster;
-    final image = st.image;
+    final image = asset?.image;
+    final r = asset?.settings ?? const RasterSettings();
     return PanelSection(
       title: 'Image engraving',
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        OutlinedButton.icon(onPressed: n.loadImage, icon: const Icon(Icons.image_outlined), label: Text(st.imageName ?? 'Load image…')),
+        OutlinedButton.icon(onPressed: n.loadImage, icon: const Icon(Icons.image_outlined), label: Text(asset?.name ?? 'Load image…')),
         if (image != null) ...[
-          const SizedBox(height: 8),
+          Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: n.removeImage, icon: const Icon(Icons.delete_outline, size: 18), label: const Text('Remove image'))),
+          const SizedBox(height: 4),
           Row(children: [
             Expanded(child: NumberField(label: 'Width', value: r.widthMm, min: 1, onCommit: (v) => n.setRaster(r.copyWith(widthMm: v)))),
             const SizedBox(width: 6),
@@ -181,7 +183,7 @@ class _ImageSection extends ConsumerWidget {
             onSelectionChanged: (s) => n.setRaster(r.copyWith(mode: s.single)),
           ),
           SwitchListTile(dense: true, contentPadding: EdgeInsets.zero, title: const Text('Invert (burn the light parts)'), value: r.invert, onChanged: (v) => n.setRaster(r.copyWith(invert: v))),
-          FilledButton.icon(onPressed: st.result.isLoading ? null : n.generateImage, icon: const Icon(Icons.local_fire_department_outlined), label: const Text('Generate image job')),
+          FilledButton.icon(onPressed: loading ? null : n.generateImage, icon: const Icon(Icons.local_fire_department_outlined), label: const Text('Generate image job')),
         ],
       ]),
     );

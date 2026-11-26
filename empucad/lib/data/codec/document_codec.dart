@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import '../../domain/cnc/tool_library.dart';
 import '../../domain/entities/document.dart';
 import '../../domain/entities/outline.dart';
 import '../../domain/entities/placement.dart';
 import '../../domain/entities/scene_node.dart';
 import '../../domain/laser/laser_models.dart';
+import 'gray_codec.dart';
 
 /// Versioned JSON for `.empucad` files. Decoding validates strictly and throws [FormatException]
 /// with a readable message, so a corrupt file never yields a half-built document.
@@ -18,6 +20,10 @@ abstract final class DocumentCodec {
         'name': d.name,
         'nodes': [for (final n in d.roots) _node(n)],
         'laser': _laser(d.laser),
+        'tools': [
+          for (final t in d.tools.tools)
+            {'id': t.id, 'name': t.name, 'kind': t.kind.name, 'diameter': t.diameter, 'angle': t.angle, 'feed': t.feed, 'plunge': t.plunge, 'rpm': t.rpm},
+        ],
       });
 
   static Document decode(String source) {
@@ -40,7 +46,39 @@ abstract final class DocumentCodec {
       name: (json['name'] as String?) ?? 'Untitled',
       roots: [for (final n in nodes) _decodeNode(n, 0)],
       laser: json['laser'] == null ? const LaserSetup() : _decodeLaser(json['laser']),
+      tools: json['tools'] == null ? const ToolLibrary() : _decodeTools(json['tools']),
     );
+  }
+
+  static ToolLibrary _decodeTools(Object? raw) {
+    if (raw is! List || raw.isEmpty) throw const FormatException('"tools" must be a non-empty list');
+    final tools = <CncTool>[];
+    for (final t in raw) {
+      if (t is! Map<String, dynamic>) throw const FormatException('A tool must be an object');
+      final id = t['id'];
+      if (id is! String || id.isEmpty || tools.any((x) => x.id == id)) throw const FormatException('Tool ids must be unique, non-empty strings');
+      final kind = CncToolKind.values.where((k) => k.name == t['kind']).firstOrNull;
+      if (kind == null) throw FormatException('Tool "$id" has an unknown kind "${t['kind']}"');
+      double pos(String k, {bool zero = false}) {
+        final v = t[k];
+        if (v is! num || !v.isFinite || (zero ? v < 0 : v <= 0)) throw FormatException('Tool "$id": "$k" must be a ${zero ? 'non-negative' : 'positive'} number');
+        return v.toDouble();
+      }
+
+      final angle = (t['angle'] is num && (t['angle'] as num).isFinite) ? (t['angle'] as num).toDouble() : 0.0;
+      if (kind == CncToolKind.vBit && !(angle > 1 && angle < 179)) throw FormatException('Tool "$id": a V-bit needs an angle between 1 and 179 degrees');
+      tools.add(CncTool(
+        id: id,
+        name: t['name'] is String ? t['name'] as String : id,
+        kind: kind,
+        diameter: pos('diameter'),
+        feed: pos('feed'),
+        plunge: pos('plunge'),
+        rpm: pos('rpm', zero: true),
+        angle: kind == CncToolKind.vBit ? angle : 0,
+      ));
+    }
+    return ToolLibrary(tools);
   }
 
   static Map<String, Object?> _laser(LaserSetup l) => {
@@ -53,7 +91,56 @@ abstract final class DocumentCodec {
             },
         ],
         'assign': l.layerOf,
+        if (l.raster != null) 'raster': _raster(l.raster!),
       };
+
+  static Map<String, Object?> _raster(RasterAsset r) => {
+        'name': r.name,
+        'width': r.image.width,
+        'height': r.image.height,
+        'data': GrayCodec.encode(r.image.gray),
+        'settings': {
+          'x': r.settings.x, 'y': r.settings.y, 'widthMm': r.settings.widthMm, 'interval': r.settings.interval, 'speed': r.settings.speed,
+          'powerMin': r.settings.powerMin, 'powerMax': r.settings.powerMax, 'bidir': r.settings.bidirectional, 'overscan': r.settings.overscan,
+          'invert': r.settings.invert, 'mode': r.settings.mode.name,
+        },
+      };
+
+  /// Refuses images with more pixels than this (a corrupt header could otherwise allocate gigabytes).
+  static const _maxPixels = 16 * 1000 * 1000;
+
+  static RasterAsset _decodeRaster(Object? raw) {
+    if (raw is! Map<String, dynamic>) throw const FormatException('laser "raster" must be an object');
+    final w = raw['width'], h = raw['height'];
+    if (w is! int || h is! int || w <= 0 || h <= 0 || w * h > _maxPixels) throw const FormatException('raster has an invalid size');
+    final data = raw['data'];
+    if (data is! String) throw const FormatException('raster has no image data');
+    final s = raw['settings'];
+    if (s is! Map<String, dynamic>) throw const FormatException('raster "settings" missing');
+    double num_(String k, {bool zero = false}) {
+      final v = s[k];
+      if (v is! num || !v.isFinite || (zero ? v < 0 : v <= 0)) throw FormatException('raster "$k" must be a ${zero ? 'non-negative' : 'positive'} number');
+      return v.toDouble();
+    }
+
+    double coord(String k) {
+      final v = s[k];
+      if (v is! num || !v.isFinite) throw FormatException('raster "$k" must be a number');
+      return v.toDouble();
+    }
+
+    final pMin = num_('powerMin', zero: true), pMax = num_('powerMax', zero: true);
+    if (pMax > 100 || pMin > pMax) throw const FormatException('raster power must satisfy 0 <= min <= max <= 100');
+    return RasterAsset(
+      name: raw['name'] is String ? raw['name'] as String : 'image',
+      image: RasterImage(width: w, height: h, gray: GrayCodec.decode(data, w * h)),
+      settings: RasterSettings(
+        x: coord('x'), y: coord('y'), widthMm: num_('widthMm'), interval: num_('interval'), speed: num_('speed'),
+        powerMin: pMin, powerMax: pMax, bidirectional: s['bidir'] != false, overscan: num_('overscan', zero: true), invert: s['invert'] == true,
+        mode: RasterMode.values.where((m) => m.name == s['mode']).firstOrNull ?? RasterMode.grayscale,
+      ),
+    );
+  }
 
   static LaserSetup _decodeLaser(Object? raw) {
     if (raw is! Map<String, dynamic>) throw const FormatException('"laser" must be an object');
@@ -105,7 +192,7 @@ abstract final class DocumentCodec {
     } else if (assign != null) {
       throw const FormatException('laser "assign" must be an object');
     }
-    return LaserSetup(machine: machine, layers: layers, layerOf: layerOf);
+    return LaserSetup(machine: machine, layers: layers, layerOf: layerOf, raster: raw['raster'] == null ? null : _decodeRaster(raw['raster']));
   }
 
   static Map<String, Object?> _node(SceneNode n) {
