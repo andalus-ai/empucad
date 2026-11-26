@@ -6,11 +6,13 @@ mod drill;
 mod engrave;
 mod pocket;
 mod profile;
+mod vcarve;
 
 pub use drill::Drill;
 pub use engrave::Engrave;
 pub use pocket::Pocket;
 pub use profile::{Profile, Side};
+pub use vcarve::VCarve;
 
 use crate::geom2d::{signed_area, Region};
 use crate::types::{Path3, Polyline, Pt};
@@ -27,12 +29,17 @@ pub enum ToolKind {
 pub struct Tool {
     pub kind: ToolKind,
     pub diameter: f64,
+    /// Included angle in degrees; only meaningful for V-bits.
+    pub angle_deg: f64,
     pub name: String,
 }
 
 impl Tool {
     pub fn end_mill(diameter: f64) -> Self {
-        Self { kind: ToolKind::EndMill, diameter, name: String::new() }
+        Self { kind: ToolKind::EndMill, diameter, angle_deg: 0.0, name: String::new() }
+    }
+    pub fn v_bit(diameter: f64, angle_deg: f64) -> Self {
+        Self { kind: ToolKind::VBit, diameter, angle_deg, name: String::new() }
     }
     pub fn radius(&self) -> f64 {
         self.diameter / 2.0

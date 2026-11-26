@@ -11,8 +11,8 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 
 | Part | State |
 |---|---|
-| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 73 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 70 tests (Dart 3.14.1) |
+| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 81 tests, `clippy` clean (Rust 1.89) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 71 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -118,7 +118,8 @@ packages/empucad_engine/
 | Laser image engraving (grayscale / dither / invert), depth-map style power | done (engine + laser workspace UI) |
 | SVG import to an extruded, editable node (`OutlineNode`) | done (engine, document, codec, CAM footprint, toolbar button, thickness field) |
 | Laser layers (line / fill, passes, power, overscan), per-shape layer assignment, bed check, G-code preview | done (engine, document, laser workspace UI) |
-| CNC: V-carve, helix entry, dogbones, tool library, GRBL simulator | not started |
+| CNC: V-carve | done as a contour-parallel approximation (see below); not a medial-axis V-carve |
+| CNC: helix entry, dogbones, tool library, GRBL simulator | not started |
 | Text, STL import UI, mesh tools, align/mirror/array | not started |
 | Arc output (G2/G3) | done as an opt-in fit: runs of short cuts on a circle become one arc (planar only, tolerance 0.005 mm); true arc-preserving offsets (`cavalier_contours`) are still future work |
 
@@ -135,6 +136,19 @@ Switch with the **Design / CNC / Laser** control in the app bar.
 * Coordinates are machine coordinates everywhere (origin bottom-left, Y up): the Y that goes in is the Y
   in the G-code. This is covered by Rust tests, because getting it wrong mirrors every burn.
 * A bed check warns when shapes or the image leave the bed.
+
+## V-carve
+
+Pick **V-carve** in the CNC panel, set the bit's included angle (e.g. 60 or 90 degrees) and its widest
+cut (Tool diameter). The groove deepens with the shape width so its top edge lands on the outline.
+
+* It is built from concentric inward offsets, each cut at the depth `distance / tan(angle / 2)`. Ring
+  spacing is capped at 0.5 mm (finish quality), regardless of bit size or stepover.
+* Depth is limited by your Depth setting and by the bit itself: a 2 mm bit at 90 degrees cannot cut
+  deeper than 1 mm, whatever you ask for.
+* **Approximation:** inner corners come out slightly rounded and there are fine ridges between rings,
+  unlike a true medial-axis V-carve. Shapes wider than the bit can reach are carved to the depth limit
+  and the middle is left uncut; clear it with a pocket pass.
 
 ## Known limits
 

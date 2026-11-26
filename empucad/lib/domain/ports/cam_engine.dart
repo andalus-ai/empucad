@@ -4,7 +4,7 @@ import '../entities/outline.dart';
 
 export '../entities/outline.dart';
 
-enum CamOperationKind { profileOutside, profileInside, profileOn, pocket, engrave, drill }
+enum CamOperationKind { profileOutside, profileInside, profileOn, pocket, engrave, drill, vcarve }
 
 final class CamOperation {
   const CamOperation({
@@ -13,6 +13,7 @@ final class CamOperation {
     required this.shapes,
     this.toolNumber = 1,
     this.toolDiameter = 3.0,
+    this.toolAngle = 60.0,
     this.depth = 3.0,
     this.stepDown = 1.0,
     this.stepOver = 0.45,
@@ -31,6 +32,9 @@ final class CamOperation {
   final int toolNumber;
   final double toolDiameter, depth, stepDown, stepOver, feed, plunge, rpm;
 
+  /// Included angle of a V-bit in degrees. Only used by [CamOperationKind.vcarve].
+  final double toolAngle;
+
   /// Holding tabs (profiles only); 0 = none. Width is along the tool-centre path.
   final int tabCount;
   final double tabWidth, tabHeight;
@@ -43,6 +47,7 @@ final class CamOperation {
     CamOperationKind? kind,
     List<ShapeOutlines>? shapes,
     double? toolDiameter,
+    double? toolAngle,
     double? depth,
     double? stepDown,
     int? tabCount,
@@ -56,6 +61,7 @@ final class CamOperation {
         shapes: shapes ?? this.shapes,
         toolNumber: toolNumber,
         toolDiameter: toolDiameter ?? this.toolDiameter,
+        toolAngle: toolAngle ?? this.toolAngle,
         depth: depth ?? this.depth,
         stepDown: stepDown ?? this.stepDown,
         stepOver: stepOver,

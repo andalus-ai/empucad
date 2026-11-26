@@ -21,6 +21,7 @@ class CamPanel extends ConsumerWidget {
     CamOperationKind.pocket: 'Pocket',
     CamOperationKind.engrave: 'Engrave',
     CamOperationKind.drill: 'Drill',
+    CamOperationKind.vcarve: 'V-carve',
   };
 
   @override
@@ -48,6 +49,14 @@ class CamPanel extends ConsumerWidget {
           const SizedBox(width: 6),
           Expanded(child: NumberField(label: 'Per pass', value: cam.stepDown, min: 0.05, onCommit: n.setStepDown)),
         ]),
+        if (cam.kind == CamOperationKind.vcarve) ...[
+          gap(),
+          NumberField(label: 'V-bit angle', value: cam.toolAngle, min: 1, suffix: '°', onCommit: (v) => n.setToolAngle(v.clamp(1.0, 179.0))),
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text('Groove depth follows the shape width. Tool Ø is the bit\'s widest cut; Depth is the limit.', style: Theme.of(context).textTheme.bodySmall),
+          ),
+        ],
         gap(),
         Row(children: [
           Expanded(child: NumberField(label: 'Ramp', value: cam.rampLength, min: 0, onCommit: n.setRamp)),

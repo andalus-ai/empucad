@@ -10,6 +10,7 @@ final class CamState {
   const CamState({
     this.kind = CamOperationKind.profileOutside,
     this.toolDiameter = 3.0,
+    this.toolAngle = 60.0,
     this.depth = 3.0,
     this.stepDown = 1.0,
     this.tabCount = 0,
@@ -20,7 +21,7 @@ final class CamState {
     this.result = const AsyncData<CamResult?>(null),
   });
   final CamOperationKind kind;
-  final double toolDiameter, depth, stepDown, tabWidth, tabHeight, rampLength;
+  final double toolDiameter, toolAngle, depth, stepDown, tabWidth, tabHeight, rampLength;
   final int tabCount;
   final CamSettings settings;
   final AsyncValue<CamResult?> result;
@@ -28,6 +29,7 @@ final class CamState {
   CamState copyWith({
     CamOperationKind? kind,
     double? toolDiameter,
+    double? toolAngle,
     double? depth,
     double? stepDown,
     int? tabCount,
@@ -40,6 +42,7 @@ final class CamState {
       CamState(
         kind: kind ?? this.kind,
         toolDiameter: toolDiameter ?? this.toolDiameter,
+        toolAngle: toolAngle ?? this.toolAngle,
         depth: depth ?? this.depth,
         stepDown: stepDown ?? this.stepDown,
         tabCount: tabCount ?? this.tabCount,
@@ -57,6 +60,7 @@ class CamNotifier extends Notifier<CamState> {
 
   void setKind(CamOperationKind k) => state = state.copyWith(kind: k);
   void setTool(double d) => state = state.copyWith(toolDiameter: d);
+  void setToolAngle(double d) => state = state.copyWith(toolAngle: d);
   void setDepth(double d) => state = state.copyWith(depth: d);
   void setStepDown(double d) => state = state.copyWith(stepDown: d);
   void setTabCount(int n) => state = state.copyWith(tabCount: n);
@@ -83,6 +87,7 @@ class CamNotifier extends Notifier<CamState> {
       kind: state.kind,
       shapes: shapes,
       toolDiameter: state.toolDiameter,
+      toolAngle: state.toolAngle,
       depth: state.depth,
       stepDown: state.stepDown,
       tabCount: isProfile ? state.tabCount : 0,
