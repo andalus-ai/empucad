@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide Viewport;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/open_document.dart';
 import '../../data/codec/document_codec.dart';
 import '../../domain/entities/scene_node.dart';
 import '../../domain/ports/geometry_engine.dart';
@@ -53,9 +54,12 @@ class EditorScreen extends ConsumerWidget {
     final selectedGroup = sel.length == 1 && doc.find(sel.single) is GroupNode ? sel.single : null;
 
     final toolbar = [
-      ToolButton(icon: Icons.folder_open, tooltip: 'Open…', onPressed: () => guarded(() async {
-        final text = await ref.read(importServiceProvider).pickText(extensions: const ['empucad']);
-        if (text != null) ed.load(DocumentCodec.decode(text));
+      ToolButton(icon: Icons.folder_open, tooltip: 'Open… (.empucad or DabbleCAD .dabble)', onPressed: () => guarded(() async {
+        final text = await ref.read(importServiceProvider).pickText(extensions: const ['empucad', 'dabble']);
+        if (text == null) return;
+        final opened = DocumentOpener.open(text);
+        ed.load(opened.document);
+        if (opened.warnings.isNotEmpty && context.mounted) await _showImportNotes(context, opened.warnings);
       })),
       ToolButton(icon: Icons.save, tooltip: 'Save…', onPressed: () => guarded(() async {
         await ref.read(exportServiceProvider).save(
@@ -167,3 +171,28 @@ class _Sidebar extends ConsumerWidget {
     );
   }
 }
+
+/// Lists what did not survive importing a DabbleCAD design, so nothing is lost silently.
+Future<void> _showImportNotes(BuildContext context, List<String> notes) => showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Imported with some changes'),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              for (final n in notes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.info_outline, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(n)),
+                  ]),
+                ),
+            ]),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('OK'))],
+      ),
+    );

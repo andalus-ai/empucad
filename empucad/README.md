@@ -12,7 +12,7 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 | Part | State |
 |---|---|
 | Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 81 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 106 tests (Dart 3.14.1) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 139 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -111,7 +111,7 @@ packages/empucad_engine/
 |---|---|
 | Shapes, groups, holes, union/intersect/bundle | done (`SceneEvaluator`) |
 | Undo/redo | done (`History`) |
-| Save/open | done, own `.empucad` JSON (DabbleCAD files are not imported yet) |
+| Save/open | done: own `.empucad` JSON; **DabbleCAD `.dabble` files open too** (see below) |
 | STL export | done |
 | CNC: profile, pocket, engrave, drill; 5 controller posts; time estimate | done (engine + panel) |
 | CNC: holding tabs, ramp entry | done (engine + CNC panel fields) |
@@ -138,6 +138,23 @@ Switch with the **Design / CNC / Laser** control in the app bar.
 * Coordinates are machine coordinates everywhere (origin bottom-left, Y up): the Y that goes in is the Y
   in the G-code. This is covered by Rust tests, because getting it wrong mirrors every burn.
 * A bed check warns when shapes or the image leave the bed.
+
+## Opening DabbleCAD files
+
+**Open…** accepts `.empucad` and DabbleCAD `.dabble` files and tells them apart by content. After a
+DabbleCAD import a dialog lists everything that did not carry across exactly.
+
+* **Imported:** box, cylinder, sphere and cone shapes; groups (union, intersect, bundle); holes; names;
+  colours; positions, rotations and sizes; laser layer settings for layers 1 to 5.
+* **Skipped and reported:** every other shape kind (roof, torus, text, mesh, ...), hidden shapes, laser
+  shapes and image-mode layers, laser layers 6 and up.
+* **Simplified and reported:** rounded boxes and bevels lose their rounding; few-sided cylinders (hexagonal
+  prisms) become round; cones with a flat top become pointed; stretched round shapes become circular.
+* **How sizes map:** DabbleCAD stores size as a scale in the node matrix. EmpuCAD stores size and placement
+  separately, so each matrix is decomposed. A group's scale is pushed into its children, which is exact
+  unless a rotated child sits in a non-uniformly scaled group (that case is detected and reported).
+* Verified by tests that compare the world-space corners of hundreds of random shapes and groups against
+  DabbleCAD's own matrix maths.
 
 ## Tools
 
