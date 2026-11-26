@@ -30,6 +30,13 @@ flutter run --enable-flutter-gpu              # GPU renderer (flutter_scene)
 flutter run --dart-define=EMPUCAD_RENDERER=canvas   # software fallback, no Flutter GPU needed
 ```
 
+**After changing anything in `packages/empucad_engine/rust/src/api/`** (the bridge surface), regenerate the
+Dart and Rust glue, or the crate will not compile against the stale `frb_generated.rs`:
+
+```bash
+cd packages/empucad_engine && flutter_rust_bridge_codegen generate
+```
+
 Engine only, no Flutter: `cd packages/empucad_engine/rust && cargo test --workspace`.
 
 ## Architecture
