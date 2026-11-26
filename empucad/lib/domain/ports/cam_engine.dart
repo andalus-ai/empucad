@@ -71,11 +71,17 @@ final class CamOperation {
 }
 
 final class CamSettings {
-  const CamSettings({this.postId = 'grbl', this.inches = false, this.safeZ = 5, this.clearZ = 1, this.rapidRate = 3000});
+  const CamSettings({this.postId = 'grbl', this.inches = false, this.safeZ = 5, this.clearZ = 1, this.rapidRate = 3000, this.arcs = false});
   final String postId;
   final bool inches;
   final double safeZ, clearZ, rapidRate;
-  CamSettings copyWith({String? postId, bool? inches}) => CamSettings(postId: postId ?? this.postId, inches: inches ?? this.inches, safeZ: safeZ, clearZ: clearZ, rapidRate: rapidRate);
+
+  /// Emit G2/G3 arcs where cuts lie on a circle: smaller, smoother programs. Off by default because
+  /// a few older controllers handle arcs poorly.
+  final bool arcs;
+
+  CamSettings copyWith({String? postId, bool? inches, bool? arcs}) =>
+      CamSettings(postId: postId ?? this.postId, inches: inches ?? this.inches, safeZ: safeZ, clearZ: clearZ, rapidRate: rapidRate, arcs: arcs ?? this.arcs);
 }
 
 final class PostInfo {

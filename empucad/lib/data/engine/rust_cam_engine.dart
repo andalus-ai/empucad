@@ -22,6 +22,7 @@ final class RustCamEngine implements CamEngine {
           safeZ: s.safeZ,
           clearZ: s.clearZ,
           rapidRate: s.rapidRate,
+          arcs: s.arcs,
         ),
       );
       return CamResult(gcode: r.gcode, fileExtension: r.fileExtension, seconds: r.seconds, preview: r.preview);

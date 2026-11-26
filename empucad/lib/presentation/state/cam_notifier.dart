@@ -64,6 +64,7 @@ class CamNotifier extends Notifier<CamState> {
   void setTabHeight(double v) => state = state.copyWith(tabHeight: v);
   void setRamp(double v) => state = state.copyWith(rampLength: v);
   void setPost(String id) => state = state.copyWith(settings: state.settings.copyWith(postId: id));
+  void setArcs(bool v) => state = state.copyWith(settings: state.settings.copyWith(arcs: v));
   void setInches(bool v) => state = state.copyWith(settings: state.settings.copyWith(inches: v));
 
   /// Generate toolpaths for the selection (or every solid shape when nothing is selected).

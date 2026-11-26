@@ -61,6 +61,8 @@ pub struct CamJobSpec {
     pub safe_z: f64,
     pub clear_z: f64,
     pub rapid_rate: f64,
+    /// Emit G2/G3 arcs where runs of cuts lie on a circle.
+    pub arcs: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -145,6 +147,7 @@ pub fn generate_cam(job: CamJobSpec) -> Result<CamResult, EngineApiError> {
     out.safe_z = job.safe_z;
     out.clear_z = job.clear_z;
     out.rapid_rate = job.rapid_rate;
+    out.arcs = job.arcs;
     Ok(CamResult {
         gcode: gcode::write(&program, &out),
         file_extension: post.ext.into(),
@@ -169,7 +172,7 @@ mod tests {
                 depth: 2.0, step_down: 1.0, step_over: 0.45, climb: true, feed: 800.0, plunge: 300.0, rpm: 12000.0,
                 tab_count: 0, tab_width: 0.0, tab_height: 0.0, ramp_length: 0.0,
             }],
-            post_id: "grbl".into(), inches: false, safe_z: 5.0, clear_z: 1.0, rapid_rate: 3000.0,
+            post_id: "grbl".into(), inches: false, safe_z: 5.0, clear_z: 1.0, rapid_rate: 3000.0, arcs: false,
         }
     }
 
@@ -238,6 +241,21 @@ mod tests {
         let cuts: Vec<&[f32]> = ramped.preview.chunks_exact(4).filter(|m| m[3] == 0.0).collect();
         let vertical_plunges = cuts.windows(2).filter(|w| w[0][0] == w[1][0] && w[0][1] == w[1][1] && w[1][2] < w[0][2] - 0.5).count();
         assert_eq!(vertical_plunges, 0);
+    }
+
+    #[test]
+    fn arcs_option_turns_rounded_corners_into_g3_and_shortens_the_program() {
+        let plain = generate_cam(job(ToolpathKind::ProfileOutside)).unwrap();
+        assert!(!plain.gcode.lines().any(|l| l.starts_with("G2 ") || l.starts_with("G3 ")));
+        let mut j = job(ToolpathKind::ProfileOutside);
+        j.arcs = true;
+        let arcs = generate_cam(j).unwrap();
+        // outside + climb is counter-clockwise: four rounded corners per level
+        assert!(arcs.gcode.lines().filter(|l| l.starts_with("G3 ")).count() >= 4, "{}", arcs.gcode);
+        assert!(arcs.gcode.lines().count() < plain.gcode.lines().count());
+        // the preview still traces the same outline: x stays within the offset square
+        let xs: Vec<f32> = arcs.preview.chunks_exact(4).filter(|m| m[3] == 0.0).map(|m| m[0]).collect();
+        assert!(xs.iter().all(|&x| (-1.51..=21.51).contains(&x)));
     }
 
     #[test]

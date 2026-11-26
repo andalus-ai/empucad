@@ -11,8 +11,8 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 
 | Part | State |
 |---|---|
-| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 64 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 69 tests (Dart 3.14.1) |
+| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 73 tests, `clippy` clean (Rust 1.89) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 70 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -120,7 +120,7 @@ packages/empucad_engine/
 | Laser layers (line / fill, passes, power, overscan), per-shape layer assignment, bed check, G-code preview | done (engine, document, laser workspace UI) |
 | CNC: V-carve, helix entry, dogbones, tool library, GRBL simulator | not started |
 | Text, STL import UI, mesh tools, align/mirror/array | not started |
-| Arc output (G2/G3) | not started (`cavalier_contours` is the candidate; offsets are polylines today) |
+| Arc output (G2/G3) | done as an opt-in fit: runs of short cuts on a circle become one arc (planar only, tolerance 0.005 mm); true arc-preserving offsets (`cavalier_contours`) are still future work |
 
 ## Laser workspace
 
