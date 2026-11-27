@@ -25,4 +25,10 @@ final class FileSelectorExportService implements ExportService, ImportService {
     final file = await openFile(acceptedTypeGroups: [XTypeGroup(label: 'EmpuCAD', extensions: extensions)]);
     return file?.readAsString();
   }
+
+  @override
+  Future<Uint8List?> pickBytes({required List<String> extensions}) async {
+    final file = await openFile(acceptedTypeGroups: [XTypeGroup(label: 'Image', extensions: extensions)]);
+    return file?.readAsBytes();
+  }
 }

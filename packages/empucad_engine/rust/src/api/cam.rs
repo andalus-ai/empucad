@@ -26,6 +26,7 @@ pub enum ToolpathKind {
     Pocket,
     Engrave,
     Drill,
+    VCarve,
 }
 
 /// One tool + operation. A job is an ordered list of these.
@@ -34,6 +35,8 @@ pub struct OperationSpec {
     pub name: String,
     pub tool_number: u32,
     pub tool_diameter: f64,
+    /// Included angle of a V-bit in degrees; used (and required) only for `VCarve`.
+    pub tool_angle: f64,
     pub kind: ToolpathKind,
     pub shapes: Vec<ShapeOutlines>,
     pub depth: f64,
@@ -50,6 +53,8 @@ pub struct OperationSpec {
     pub tab_height: f64,
     /// 0 = plunge straight down.
     pub ramp_length: f64,
+    /// Relief into sharp inside corners (inside profiles and pocket walls).
+    pub dogbones: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -61,6 +66,8 @@ pub struct CamJobSpec {
     pub safe_z: f64,
     pub clear_z: f64,
     pub rapid_rate: f64,
+    /// Emit G2/G3 arcs where runs of cuts lie on a circle.
+    pub arcs: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +110,7 @@ fn strategy(kind: ToolpathKind) -> Box<dyn ToolpathStrategy> {
         ToolpathKind::Pocket => Box::new(Pocket),
         ToolpathKind::Engrave => Box::new(Engrave),
         ToolpathKind::Drill => Box::new(Drill),
+        ToolpathKind::VCarve => Box::new(VCarve),
     }
 }
 
@@ -121,7 +129,14 @@ pub fn generate_cam(job: CamJobSpec) -> Result<CamResult, EngineApiError> {
             lines.extend(pl);
         }
         let geo = Geometry { region, lines };
-        let tool = Tool::end_mill(op.tool_diameter);
+        let tool = if matches!(op.kind, ToolpathKind::VCarve) {
+            if !(op.tool_angle > 1.0 && op.tool_angle < 179.0) {
+                return Err(EngineApiError::invalid(format!("'{}': a V-bit needs an included angle between 1 and 179 degrees", op.name)));
+            }
+            Tool::v_bit(op.tool_diameter, op.tool_angle)
+        } else {
+            Tool::end_mill(op.tool_diameter)
+        };
         let cut = CutParams {
             depth: op.depth,
             step_down: op.step_down,
@@ -129,6 +144,7 @@ pub fn generate_cam(job: CamJobSpec) -> Result<CamResult, EngineApiError> {
             direction: if op.climb { Direction::Climb } else { Direction::Conventional },
             tabs: (op.tab_count > 0).then_some(Tabs { count: op.tab_count, width: op.tab_width, height: op.tab_height }),
             ramp_length: op.ramp_length.max(0.0),
+            dogbones: op.dogbones,
         };
         sections.push(Section {
             name: op.name.clone(),
@@ -145,6 +161,7 @@ pub fn generate_cam(job: CamJobSpec) -> Result<CamResult, EngineApiError> {
     out.safe_z = job.safe_z;
     out.clear_z = job.clear_z;
     out.rapid_rate = job.rapid_rate;
+    out.arcs = job.arcs;
     Ok(CamResult {
         gcode: gcode::write(&program, &out),
         file_extension: post.ext.into(),
@@ -165,11 +182,11 @@ mod tests {
     fn job(kind: ToolpathKind) -> CamJobSpec {
         CamJobSpec {
             operations: vec![OperationSpec {
-                name: "op".into(), tool_number: 1, tool_diameter: 3.0, kind, shapes: vec![ShapeOutlines { outlines: vec![square()] }],
+                name: "op".into(), tool_number: 1, tool_diameter: 3.0, tool_angle: 0.0, kind, shapes: vec![ShapeOutlines { outlines: vec![square()] }],
                 depth: 2.0, step_down: 1.0, step_over: 0.45, climb: true, feed: 800.0, plunge: 300.0, rpm: 12000.0,
-                tab_count: 0, tab_width: 0.0, tab_height: 0.0, ramp_length: 0.0,
+                tab_count: 0, tab_width: 0.0, tab_height: 0.0, ramp_length: 0.0, dogbones: false,
             }],
-            post_id: "grbl".into(), inches: false, safe_z: 5.0, clear_z: 1.0, rapid_rate: 3000.0,
+            post_id: "grbl".into(), inches: false, safe_z: 5.0, clear_z: 1.0, rapid_rate: 3000.0, arcs: false,
         }
     }
 
@@ -238,6 +255,61 @@ mod tests {
         let cuts: Vec<&[f32]> = ramped.preview.chunks_exact(4).filter(|m| m[3] == 0.0).collect();
         let vertical_plunges = cuts.windows(2).filter(|w| w[0][0] == w[1][0] && w[0][1] == w[1][1] && w[1][2] < w[0][2] - 0.5).count();
         assert_eq!(vertical_plunges, 0);
+    }
+
+    #[test]
+    fn arcs_option_turns_rounded_corners_into_g3_and_shortens_the_program() {
+        let plain = generate_cam(job(ToolpathKind::ProfileOutside)).unwrap();
+        assert!(!plain.gcode.lines().any(|l| l.starts_with("G2 ") || l.starts_with("G3 ")));
+        let mut j = job(ToolpathKind::ProfileOutside);
+        j.arcs = true;
+        let arcs = generate_cam(j).unwrap();
+        // outside + climb is counter-clockwise: four rounded corners per level
+        assert!(arcs.gcode.lines().filter(|l| l.starts_with("G3 ")).count() >= 4, "{}", arcs.gcode);
+        assert!(arcs.gcode.lines().count() < plain.gcode.lines().count());
+        // the preview still traces the same outline: x stays within the offset square
+        let xs: Vec<f32> = arcs.preview.chunks_exact(4).filter(|m| m[3] == 0.0).map(|m| m[0]).collect();
+        assert!(xs.iter().all(|&x| (-1.51..=21.51).contains(&x)));
+    }
+
+    #[test]
+    fn vcarve_cuts_several_depths_and_needs_a_valid_bit_angle() {
+        let mut j = job(ToolpathKind::VCarve);
+        j.operations[0].tool_diameter = 6.0;
+        j.operations[0].tool_angle = 60.0;
+        j.operations[0].depth = 4.0;
+        j.operations[0].step_over = 0.1;
+        let r = generate_cam(j.clone()).unwrap();
+        let mut depths: Vec<i64> = r.preview.chunks_exact(4).filter(|m| m[3] == 0.0 && m[2] < 0.0).map(|m| (m[2] * 100.0).round() as i64).collect();
+        depths.sort_unstable();
+        depths.dedup();
+        assert!(depths.len() >= 5, "a groove that deepens inward has many ring depths: {depths:?}");
+        assert!(r.gcode.contains("M3 S12000"));
+        for bad in [0.0, 0.5, 180.0, f64::NAN] {
+            let mut b = j.clone();
+            b.operations[0].tool_angle = bad;
+            assert!(generate_cam(b).is_err(), "angle {bad}");
+        }
+        // an end mill job ignores the angle field entirely
+        let mut e = job(ToolpathKind::Pocket);
+        e.operations[0].tool_angle = 0.0;
+        assert!(generate_cam(e).is_ok());
+    }
+
+    #[test]
+    fn dogbones_option_adds_relief_moves_to_an_inside_profile_only() {
+        let mut plain = job(ToolpathKind::ProfileInside);
+        plain.operations[0].tool_diameter = 6.0;
+        let base = generate_cam(plain.clone()).unwrap();
+        let mut bone = plain.clone();
+        bone.operations[0].dogbones = true;
+        let with = generate_cam(bone).unwrap();
+        assert!(with.preview.len() > base.preview.len(), "each of the 4 corners adds an out-and-back move per level");
+        // outside profile ignores the flag
+        let mut o = job(ToolpathKind::ProfileOutside);
+        let before = generate_cam(o.clone()).unwrap().gcode;
+        o.operations[0].dogbones = true;
+        assert_eq!(generate_cam(o).unwrap().gcode, before);
     }
 
     #[test]

@@ -65,6 +65,26 @@ pub fn write(program: &Program, o: &Output) -> String {
                     spindle_on = true;
                 }
             }
+            Event::Arc { x, y, z, i, j, cw, feed, .. } => {
+                let g = if cw { 2 } else { 3 };
+                // arcs repeat their G code on every line: clearer, and safe on controllers that treat it as non-modal
+                let mut w = vec![format!("G{g}")];
+                last_g = Some(g);
+                w.push(format!("X{}", num(x * u)));
+                w.push(format!("Y{}", num(y * u)));
+                if (last[2] - z).abs() > 1e-6 || last[2].is_nan() {
+                    w.push(format!("Z{}", num(z * u)));
+                }
+                w.push(format!("I{}", num(i * u)));
+                w.push(format!("J{}", num(j * u)));
+                let f = (feed * u).round() as i64;
+                if last_f != Some(f) {
+                    w.push(format!("F{f}"));
+                    last_f = Some(f);
+                }
+                last = [x, y, z];
+                l.push(&w.join(" "));
+            }
             Event::Move { x, y, z, rapid, feed } => {
                 let g = if rapid { 0 } else { 1 };
                 let mut w = Vec::new();

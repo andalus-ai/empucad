@@ -22,6 +22,7 @@ final class RustCamEngine implements CamEngine {
           safeZ: s.safeZ,
           clearZ: s.clearZ,
           rapidRate: s.rapidRate,
+          arcs: s.arcs,
         ),
       );
       return CamResult(gcode: r.gcode, fileExtension: r.fileExtension, seconds: r.seconds, preview: r.preview);
@@ -34,6 +35,7 @@ final class RustCamEngine implements CamEngine {
         name: o.name,
         toolNumber: o.toolNumber,
         toolDiameter: o.toolDiameter,
+        toolAngle: o.toolAngle,
         kind: switch (o.kind) {
           CamOperationKind.profileOutside => rust.ToolpathKind.profileOutside,
           CamOperationKind.profileInside => rust.ToolpathKind.profileInside,
@@ -41,6 +43,7 @@ final class RustCamEngine implements CamEngine {
           CamOperationKind.pocket => rust.ToolpathKind.pocket,
           CamOperationKind.engrave => rust.ToolpathKind.engrave,
           CamOperationKind.drill => rust.ToolpathKind.drill,
+          CamOperationKind.vcarve => rust.ToolpathKind.vCarve,
         },
         shapes: [for (final s in o.shapes) OutlineMapping.shapeToRust(s)],
         depth: o.depth,
@@ -54,5 +57,6 @@ final class RustCamEngine implements CamEngine {
         tabWidth: o.tabWidth,
         tabHeight: o.tabHeight,
         rampLength: o.rampLength,
+        dogbones: o.dogbones,
       );
 }

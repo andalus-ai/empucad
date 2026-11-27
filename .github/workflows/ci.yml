@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
       - run: |
-          mkdir /tmp/pure && cp -r lib test /tmp/pure/ && cd /tmp/pure
+          mkdir /tmp/pure && cp -r empucad/lib empucad/test /tmp/pure/ && cd /tmp/pure
           printf 'name: empucad\nenvironment:\n  sdk: ^3.9.0\ndev_dependencies:\n  test: ^1.25.0\n' > pubspec.yaml
-          rm -rf lib/presentation/state lib/presentation/widgets lib/presentation/screens lib/presentation/viewport/*renderer.dart lib/presentation/viewport/viewport.dart lib/data/engine lib/data/storage/file_selector_export_service.dart lib/main.dart lib/app.dart
+          rm -f test/widget_test.dart; rm -rf lib/presentation/state lib/presentation/widgets lib/presentation/screens lib/presentation/viewport/*renderer.dart lib/presentation/viewport/viewport.dart lib/data/engine lib/data/image lib/data/storage/file_selector_export_service.dart lib/main.dart lib/app.dart
           dart pub get && dart analyze lib test && dart test

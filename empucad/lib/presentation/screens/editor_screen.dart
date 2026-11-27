@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide Viewport;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/open_document.dart';
 import '../../data/codec/document_codec.dart';
 import '../../domain/entities/scene_node.dart';
 import '../../domain/ports/geometry_engine.dart';
@@ -13,9 +14,11 @@ import '../state/engine_providers.dart';
 import '../state/export_service.dart';
 import '../state/scene_providers.dart';
 import '../state/selection_notifier.dart';
+import '../state/workspace_notifier.dart';
 import '../viewport/viewport.dart';
 import '../widgets/cam_panel.dart';
 import '../widgets/inspector_panel.dart';
+import '../widgets/laser_panel.dart';
 import '../widgets/shape_palette.dart';
 import '../widgets/tool_button.dart';
 
@@ -31,6 +34,8 @@ class EditorScreen extends ConsumerWidget {
     final doc = editor.document;
     final ed = ref.read(editorProvider.notifier);
     final panMode = ref.watch(panModeProvider);
+    // watched here, not inside the LayoutBuilder callback: Riverpod only allows watch during build
+    final workspace = ref.watch(workspaceProvider);
 
     void snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
@@ -49,9 +54,12 @@ class EditorScreen extends ConsumerWidget {
     final selectedGroup = sel.length == 1 && doc.find(sel.single) is GroupNode ? sel.single : null;
 
     final toolbar = [
-      ToolButton(icon: Icons.folder_open, tooltip: 'Open…', onPressed: () => guarded(() async {
-        final text = await ref.read(importServiceProvider).pickText(extensions: const ['empucad']);
-        if (text != null) ed.load(DocumentCodec.decode(text));
+      ToolButton(icon: Icons.folder_open, tooltip: 'Open… (.empucad or DabbleCAD .dabble)', onPressed: () => guarded(() async {
+        final text = await ref.read(importServiceProvider).pickText(extensions: const ['empucad', 'dabble']);
+        if (text == null) return;
+        final opened = DocumentOpener.open(text);
+        ed.load(opened.document);
+        if (opened.warnings.isNotEmpty && context.mounted) await _showImportNotes(context, opened.warnings);
       })),
       ToolButton(icon: Icons.save, tooltip: 'Save…', onPressed: () => guarded(() async {
         await ref.read(exportServiceProvider).save(
@@ -89,7 +97,7 @@ class EditorScreen extends ConsumerWidget {
       ToolButton(icon: Icons.center_focus_strong, tooltip: 'Frame all', onPressed: () => ref.read(cameraProvider.notifier).frameScene(ref.read(sceneProvider).value)),
     ];
 
-    const sidebar = SingleChildScrollView(child: Column(children: [ShapePalette(), InspectorPanel(), CamPanel()]));
+    const sidebar = _Sidebar();
 
     return CallbackShortcuts(
       bindings: {
@@ -106,7 +114,25 @@ class EditorScreen extends ConsumerWidget {
         child: LayoutBuilder(builder: (context, box) {
           final wide = box.maxWidth >= _wide;
           return Scaffold(
-            appBar: AppBar(title: const Text('EmpuCAD'), actions: toolbar, toolbarHeight: 48),
+            appBar: AppBar(
+              title: Row(children: [
+                const Text('EmpuCAD'),
+                const SizedBox(width: 16),
+                SegmentedButton<Workspace>(
+                  showSelectedIcon: false,
+                  style: const ButtonStyle(visualDensity: VisualDensity.compact),
+                  segments: const [
+                    ButtonSegment(value: Workspace.design, label: Text('Design')),
+                    ButtonSegment(value: Workspace.cnc, label: Text('CNC')),
+                    ButtonSegment(value: Workspace.laser, label: Text('Laser')),
+                  ],
+                  selected: {workspace},
+                  onSelectionChanged: (s) => ref.read(workspaceProvider.notifier).select(s.single),
+                ),
+              ]),
+              actions: toolbar,
+              toolbarHeight: 48,
+            ),
             endDrawer: wide ? null : const Drawer(child: SafeArea(child: sidebar)),
             floatingActionButton: wide
                 ? null
@@ -124,3 +150,49 @@ class EditorScreen extends ConsumerWidget {
     );
   }
 }
+
+/// Shape palette and inspector always; the CNC or laser panel follows the active workspace.
+class _Sidebar extends ConsumerWidget {
+  const _Sidebar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ws = ref.watch(workspaceProvider);
+    return SingleChildScrollView(
+      child: Column(children: [
+        const ShapePalette(),
+        const InspectorPanel(),
+        switch (ws) {
+          Workspace.design => const SizedBox.shrink(),
+          Workspace.cnc => const CamPanel(),
+          Workspace.laser => const LaserPanel(),
+        },
+      ]),
+    );
+  }
+}
+
+/// Lists what did not survive importing a DabbleCAD design, so nothing is lost silently.
+Future<void> _showImportNotes(BuildContext context, List<String> notes) => showDialog<void>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Imported with some changes'),
+        content: SizedBox(
+          width: 460,
+          child: SingleChildScrollView(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              for (final n in notes)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.info_outline, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(n)),
+                  ]),
+                ),
+            ]),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(c).pop(), child: const Text('OK'))],
+      ),
+    );

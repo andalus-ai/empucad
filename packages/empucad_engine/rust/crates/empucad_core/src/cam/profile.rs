@@ -35,6 +35,7 @@ impl ToolpathStrategy for Profile {
             .into_iter()
             .flat_map(|(ring, outside)| {
                 // climb: CCW outside, CW inside
+                let ring = if cut.dogbones && self.side == Side::Inside { add_dogbones(&ring, r) } else { ring };
                 let ring = orient_ring(ring, outside == climb);
                 ring_passes_ex(&ring, &levels, cut.depth, cut.tabs.as_ref(), cut.ramp_length, 0.0)
             })

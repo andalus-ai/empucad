@@ -1,12 +1,17 @@
+import '../cnc/tool_library.dart';
+import '../laser/laser_models.dart';
 import 'scene_node.dart';
 
 /// The whole design: an ordered forest of nodes. Immutable; edits return a new [Document].
 final class Document {
-  const Document({this.name = 'Untitled', this.roots = const []});
+  const Document({this.name = 'Untitled', this.roots = const [], this.laser = const LaserSetup(), this.tools = const ToolLibrary()});
   final String name;
   final List<SceneNode> roots;
+  final LaserSetup laser;
+  final ToolLibrary tools;
 
-  Document copyWith({String? name, List<SceneNode>? roots}) => Document(name: name ?? this.name, roots: roots ?? this.roots);
+  Document copyWith({String? name, List<SceneNode>? roots, LaserSetup? laser, ToolLibrary? tools}) =>
+      Document(name: name ?? this.name, roots: roots ?? this.roots, laser: laser ?? this.laser, tools: tools ?? this.tools);
 
   SceneNode? find(String id) => _find(roots, id);
 
@@ -46,7 +51,13 @@ final class Document {
             n,
       ];
 
-  Document removeIds(Set<String> ids) => copyWith(roots: _remove(roots, ids));
+  Document removeIds(Set<String> ids) {
+    final next = copyWith(roots: _remove(roots, ids));
+    // drop laser assignments of nodes that no longer exist
+    final live = {for (final n in next.allNodes) n.id};
+    final kept = {for (final e in laser.layerOf.entries) if (live.contains(e.key)) e.key: e.value};
+    return kept.length == laser.layerOf.length ? next : next.copyWith(laser: laser.copyWith(layerOf: kept));
+  }
 
   static List<SceneNode> _remove(List<SceneNode> nodes, Set<String> ids) => [
         for (final n in nodes)

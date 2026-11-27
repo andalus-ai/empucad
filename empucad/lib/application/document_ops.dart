@@ -1,8 +1,10 @@
 import 'dart:math' as math;
 
+import '../domain/cnc/tool_library.dart';
 import '../domain/entities/document.dart';
 import '../domain/entities/placement.dart';
 import '../domain/entities/scene_node.dart';
+import '../domain/laser/laser_models.dart';
 
 /// Pure document edits. Each returns a new [Document]; none touch state, UI or the engine.
 /// The Riverpod notifier only decides *when* to call these.
@@ -65,4 +67,37 @@ abstract final class DocumentOps {
     ];
     return d.copyWith(roots: [...d.roots.sublist(0, i), ...kids, ...d.roots.sublist(i + 1)]);
   }
+
+  /// Burn these nodes on laser layer [layer]. Unknown layers are ignored.
+  static Document assignLayer(Document d, Set<String> ids, int layer) {
+    if (d.laser.layer(layer) == null || ids.isEmpty) return d;
+    final map = {...d.laser.layerOf, for (final id in ids) id: layer};
+    return d.copyWith(laser: d.laser.copyWith(layerOf: map));
+  }
+
+  static Document updateLayer(Document d, LaserLayerSettings updated) => d.copyWith(
+        laser: d.laser.copyWith(layers: [for (final l in d.laser.layers) l.index == updated.index ? updated : l]),
+      );
+
+  static Document setMachine(Document d, LaserMachine m) => d.copyWith(laser: d.laser.copyWith(machine: m));
+
+  static Document setRaster(Document d, RasterAsset asset) => d.copyWith(laser: d.laser.copyWith(raster: asset));
+
+  /// Changes how the loaded image is burned. No-op when no image is loaded.
+  static Document updateRasterSettings(Document d, RasterSettings s) {
+    final r = d.laser.raster;
+    return r == null ? d : d.copyWith(laser: d.laser.copyWith(raster: r.withSettings(s)));
+  }
+
+  static Document clearRaster(Document d) => d.laser.raster == null ? d : d.copyWith(laser: d.laser.copyWith(clearRaster: true));
+
+  static Document addTool(Document d, CncTool tool) =>
+      d.tools.find(tool.id) != null ? d : d.copyWith(tools: d.tools.copyWith(tools: [...d.tools.tools, tool]));
+
+  static Document updateTool(Document d, CncTool tool) =>
+      d.copyWith(tools: d.tools.copyWith(tools: [for (final t in d.tools.tools) t.id == tool.id ? tool : t]));
+
+  /// The last tool cannot be removed: a job always needs one.
+  static Document removeTool(Document d, String id) =>
+      d.tools.tools.length <= 1 ? d : d.copyWith(tools: d.tools.copyWith(tools: [for (final t in d.tools.tools) if (t.id != id) t]));
 }

@@ -113,6 +113,58 @@ pub fn scan_fill(region: &Region, interval: f64, angle_deg: f64, bidirectional: 
     out
 }
 
+/// Parse laser G-code into drawable moves: flat `x, y, power, rapid(1|0)` per move (mm, machine space).
+///
+/// Understands modal `G0`/`G1`, `X`/`Y` words, modal `S`, `M3`/`M4`/`M5`, `G90` (absolute only) and
+/// strips `(...)` and `;` comments. `power` is the S value in effect for the move, or 0 when the laser
+/// is off (`M5`) or the move is a rapid. Unknown words are ignored.
+pub fn preview_gcode(gcode: &str) -> Vec<f32> {
+    let (mut x, mut y, mut s) = (0.0f64, 0.0f64, 0.0f64);
+    let (mut rapid, mut laser_on) = (true, false);
+    let mut out = Vec::new();
+    for raw in gcode.lines() {
+        let mut line = String::new();
+        let mut depth = 0;
+        for ch in raw.chars() {
+            match ch {
+                '(' => depth += 1,
+                ')' => depth = (depth - 1).max(0),
+                ';' if depth == 0 => break,
+                c if depth == 0 => line.push(c),
+                _ => {}
+            }
+        }
+        let (mut nx, mut ny, mut moved) = (x, y, false);
+        for w in line.split_whitespace() {
+            let (letter, rest) = w.split_at(1);
+            let Ok(v) = rest.parse::<f64>() else { continue };
+            match letter.to_ascii_uppercase().as_str() {
+                "G" if v == 0.0 => rapid = true,
+                "G" if v == 1.0 => rapid = false,
+                "M" if v == 3.0 || v == 4.0 => laser_on = true,
+                "M" if v == 5.0 || v == 2.0 || v == 30.0 => laser_on = false,
+                "S" => s = v,
+                "X" => {
+                    nx = v;
+                    moved = true;
+                }
+                "Y" => {
+                    ny = v;
+                    moved = true;
+                }
+                _ => {}
+            }
+        }
+        if moved {
+            let power = if rapid || !laser_on { 0.0 } else { s };
+            out.extend_from_slice(&[nx as f32, ny as f32, power as f32, if rapid { 1.0 } else { 0.0 }]);
+            x = nx;
+            y = ny;
+        }
+    }
+    out
+}
+
 fn num(v: f64) -> String {
     let s = format!("{v:.3}");
     s.trim_end_matches('0').trim_end_matches('.').to_string()
@@ -137,7 +189,8 @@ pub fn plan(shapes: &[LaserShape], layers: &[LaserLayer], m: &Machine) -> LaserJ
         let s_val = (layer.power / 100.0 * m.s_max).round().clamp(0.0, m.s_max) as i64;
         let feed = (layer.speed * 60.0).max(1.0);
         g.push_str(&format!("(layer {:02} {:?} {} mm/s {}%)\n", li, layer.mode, num(layer.speed), num(layer.power)));
-        let outlines: Vec<Polyline> = shapes.iter().filter(|s| s.layer == li).flat_map(|s| s.outlines.clone()).collect();
+        let layer_shapes: Vec<&LaserShape> = shapes.iter().filter(|s| s.layer == li).collect();
+        let outlines: Vec<Polyline> = layer_shapes.iter().flat_map(|s| s.outlines.clone()).collect();
         let mut jobs: Vec<Vec<Pt>> = Vec::new(); // each is a polyline to burn with power on
         let mut overscan_dirs: Vec<Option<(Pt, Pt)>> = Vec::new();
         match layer.mode {
@@ -152,7 +205,8 @@ pub fn plan(shapes: &[LaserShape], layers: &[LaserLayer], m: &Machine) -> LaserJ
                 }
             }
             LayerMode::Fill => {
-                let region = Region::from_outlines(&outlines);
+                // one region per design shape (even-odd inside it), then union: overlapping shapes merge
+                let region = layer_shapes.iter().fold(Region::default(), |acc, sh| acc.union(&Region::from_outlines(&sh.outlines)));
                 for (a, b) in scan_fill(&region, layer.interval, layer.angle, layer.bidirectional) {
                     jobs.push(vec![a, b]);
                     overscan_dirs.push(Some((a, b)));
@@ -204,6 +258,36 @@ mod tests {
     }
 
     #[test]
+    fn preview_reads_back_what_plan_writes() {
+        let layers = vec![LaserLayer::line(0, 10.0, 50.0)];
+        let job = plan(&[LaserShape { layer: 0, outlines: vec![sq(10., 10., 20.)] }], &layers, &Machine { bed_h: 100.0, ..Default::default() });
+        let mv = preview_gcode(&job.gcode);
+        assert_eq!(mv.len() % 4, 0);
+        let moves: Vec<&[f32]> = mv.chunks_exact(4).collect();
+        // first move is the rapid to the start of the square (10, 90), laser off
+        assert_eq!((moves[0][0], moves[0][1], moves[0][2], moves[0][3]), (10.0, 90.0, 0.0, 1.0));
+        // the four sides burn at S500
+        let burns: Vec<_> = moves.iter().filter(|m| m[2] == 500.0 && m[3] == 0.0).collect();
+        assert_eq!(burns.len(), 4);
+        // total burned length = perimeter 80 mm
+        let mut len = 0.0f32;
+        for w in moves.windows(2) {
+            if w[1][2] > 0.0 {
+                len += (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
+            }
+        }
+        assert!((len - 80.0).abs() < 1e-3, "{len}");
+    }
+
+    #[test]
+    fn preview_ignores_comments_and_resets_power_on_m5() {
+        let mv = preview_gcode("(layer 00 Line)\nG21 ; units\nM4 S0\nG0 X1 Y2\nG1 X5 Y2 S700 F600\nM5\nG1 X9 Y2\n");
+        assert_eq!(mv, vec![1., 2., 0., 1., 5., 2., 700., 0., 9., 2., 0., 0.]);
+        assert!(preview_gcode("").is_empty());
+        assert!(preview_gcode("G1 Xabc Y").is_empty());
+    }
+
+    #[test]
     fn scan_fill_covers_a_square_and_alternates_direction() {
         let r = Region::from_outlines(&[sq(0., 0., 10.)]);
         let lines = scan_fill(&r, 1.0, 0.0, true);
@@ -242,6 +326,25 @@ mod tests {
         let job = plan(&[LaserShape { layer: 0, outlines: vec![sq(0., 0., 5.)] }], &[l], &m);
         assert_eq!(job.gcode.matches("S1000 F1200").count(), 3);
         assert!(job.gcode.contains("M3 S0"));
+    }
+
+    #[test]
+    fn overlapping_fill_shapes_merge_instead_of_cancelling() {
+        let layers = vec![LaserLayer { overscan: 0.0, ..LaserLayer::fill(0, 100.0, 50.0, 1.0) }];
+        let shapes = [
+            LaserShape { layer: 0, outlines: vec![sq(0., 0., 10.)] },
+            LaserShape { layer: 0, outlines: vec![sq(5., 0., 10.)] }, // overlaps the first by 5 mm
+        ];
+        let job = plan(&shapes, &layers, &Machine::default());
+        let mv = preview_gcode(&job.gcode);
+        let mut burned = 0.0f32;
+        for w in mv.chunks_exact(4).collect::<Vec<_>>().windows(2) {
+            if w[1][2] > 0.0 {
+                burned += (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
+            }
+        }
+        // union is 15 x 10 mm: ten 15 mm rows. If the overlap were XOR'd out this would be 100.
+        assert!((burned - 150.0).abs() < 1e-3, "burned {burned} mm");
     }
 
     #[test]

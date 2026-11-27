@@ -2,9 +2,11 @@
 //!
 //! [`expand_moves`] is the single source of truth for motion: the writer, the time estimate and any
 //! simulator all consume its output.
+mod arcs;
 mod post;
 mod writer;
 
+pub use arcs::{fit as fit_arcs, Seg};
 pub use post::{Post, ToolChange, POSTS};
 pub use writer::write;
 
@@ -33,11 +35,15 @@ pub struct Output {
     pub clear_z: f64,
     pub rapid_rate: f64,
     pub spin_up_secs: f64,
+    /// Fit `G2`/`G3` arcs to runs of short cuts (smaller, smoother programs). Off by default.
+    pub arcs: bool,
+    /// Largest distance from the original path an arc may stray, mm.
+    pub arc_tolerance: f64,
 }
 
 impl Output {
     pub fn new(post: &'static Post) -> Self {
-        Self { post, inches: false, safe_z: 5.0, clear_z: 1.0, rapid_rate: 3000.0, spin_up_secs: 3.0 }
+        Self { post, inches: false, safe_z: 5.0, clear_z: 1.0, rapid_rate: 3000.0, spin_up_secs: 3.0, arcs: false, arc_tolerance: 0.005 }
     }
 }
 
@@ -46,6 +52,8 @@ pub enum Event {
     Section(usize),
     /// `None` coordinates are left unchanged (used for the very first retract).
     Move { x: Option<f64>, y: Option<f64>, z: f64, rapid: bool, feed: f64 },
+    /// Planar arc at constant Z. `i`,`j` = centre relative to the start; `len` = arc length in mm.
+    Arc { x: f64, y: f64, z: f64, i: f64, j: f64, cw: bool, len: f64, feed: f64 },
 }
 
 const EPS: f64 = 1e-6;
@@ -103,8 +111,25 @@ pub fn expand_moves(program: &Program, o: &Output) -> Vec<Event> {
                     }
                 }
             }
-            for w in path.pts.windows(2) {
-                mv(&mut ev, &mut pos, w[1][0], w[1][1], w[1][2], false, cut_feed(w[0], w[1]));
+            if o.arcs {
+                let mut cur = path.pts[0];
+                for seg in arcs::fit(&path.pts, o.arc_tolerance) {
+                    match seg {
+                        Seg::Line(to) => {
+                            mv(&mut ev, &mut pos, to[0], to[1], to[2], false, cut_feed(cur, to));
+                            cur = to;
+                        }
+                        Seg::Arc { to, i, j, cw, len } => {
+                            ev.push(Event::Arc { x: to[0], y: to[1], z: to[2], i, j, cw, len, feed });
+                            pos = Some(to);
+                            cur = to;
+                        }
+                    }
+                }
+            } else {
+                for w in path.pts.windows(2) {
+                    mv(&mut ev, &mut pos, w[1][0], w[1][1], w[1][2], false, cut_feed(w[0], w[1]));
+                }
             }
         }
     }
@@ -121,9 +146,19 @@ pub fn preview(program: &Program, o: &Output) -> Vec<f32> {
     let mut out = Vec::new();
     let mut pos = [0.0f64; 3];
     for e in expand_moves(program, o) {
-        if let Event::Move { x, y, z, rapid, .. } = e {
-            pos = [x.unwrap_or(pos[0]), y.unwrap_or(pos[1]), z];
-            out.extend_from_slice(&[pos[0] as f32, pos[1] as f32, pos[2] as f32, if rapid { 1.0 } else { 0.0 }]);
+        match e {
+            Event::Move { x, y, z, rapid, .. } => {
+                pos = [x.unwrap_or(pos[0]), y.unwrap_or(pos[1]), z];
+                out.extend_from_slice(&[pos[0] as f32, pos[1] as f32, pos[2] as f32, if rapid { 1.0 } else { 0.0 }]);
+            }
+            Event::Arc { x, y, z, i, j, cw, .. } => {
+                let centre = [pos[0] + i, pos[1] + j];
+                for p in arcs::sample([pos[0], pos[1]], [x, y], centre, cw, 4.0) {
+                    out.extend_from_slice(&[p[0] as f32, p[1] as f32, z as f32, 0.0]);
+                }
+                pos = [x, y, z];
+            }
+            Event::Section(_) => {}
         }
     }
     out
@@ -136,6 +171,10 @@ pub fn estimate_seconds(program: &Program, o: &Output) -> f64 {
     for e in expand_moves(program, o) {
         match e {
             Event::Section(_) => secs += o.spin_up_secs,
+            Event::Arc { x, y, z, len, feed, .. } => {
+                secs += len / feed.max(1.0) * 60.0;
+                pos = Some([x, y, z]);
+            }
             Event::Move { x, y, z, rapid, feed } => {
                 if let Some(p) = pos {
                     let nx = x.unwrap_or(p[0]);
@@ -162,6 +201,64 @@ mod tests {
     pub(super) fn square_program() -> Program {
         let sq = |z: f64, link| Path3 { pts: vec![[0., 0., z], [10., 0., z], [10., 10., z], [0., 10., z], [0., 0., z]], link };
         Program { sections: vec![Section { name: "cut".into(), tool_number: 1, feed: 600.0, plunge: 200.0, rpm: 10000.0, paths: vec![sq(-1.0, false), sq(-2.0, true)] }] }
+    }
+
+    fn circle_program() -> Program {
+        let ring: Vec<[f64; 2]> = (0..64).map(|k| {
+            let a = 2.0 * std::f64::consts::PI * k as f64 / 64.0;
+            [10.0 * a.cos(), 10.0 * a.sin()]
+        }).collect();
+        let paths = crate::cam::ring_passes_ex(&ring, &[-1.0], 1.0, None, 0.0, 0.0);
+        Program { sections: vec![Section { name: "c".into(), tool_number: 1, feed: 600.0, plunge: 200.0, rpm: 10000.0, paths }] }
+    }
+
+    #[test]
+    fn arcs_shrink_the_program_and_keep_every_arc_geometrically_valid() {
+        let p = circle_program();
+        let mut o = Output::new(&POSTS[0]);
+        let plain = write(&p, &o);
+        assert!(!plain.lines().any(|l| l.starts_with("G2 ") || l.starts_with("G3 ")), "arcs are opt-in (note G21 is units, not an arc)");
+        o.arcs = true;
+        let arcs = write(&p, &o);
+        let arc_lines: Vec<&str> = arcs.lines().filter(|l| l.starts_with("G3 ") || l.starts_with("G2 ")).collect();
+        assert!(!arc_lines.is_empty());
+        assert!(arc_lines.iter().all(|l| l.starts_with("G3 ")), "a CCW ring is cut with G3: {arc_lines:?}");
+        assert!(arc_lines.iter().all(|l| l.contains(" I") && l.contains(" J") && l.contains(" X") && l.contains(" Y")));
+        assert!(arcs.lines().count() * 3 < plain.lines().count(), "{} vs {}", arcs.lines().count(), plain.lines().count());
+
+        // every arc must have equal start and end radius, or the controller raises an alarm
+        let mut pos = [f64::NAN; 3];
+        let mut arcs_seen = 0;
+        for e in expand_moves(&p, &o) {
+            match e {
+                Event::Move { x, y, z, .. } => pos = [x.unwrap_or(pos[0]), y.unwrap_or(pos[1]), z],
+                Event::Arc { x, y, z, i, j, .. } => {
+                    let c = [pos[0] + i, pos[1] + j];
+                    let (r0, r1) = ((pos[0] - c[0]).hypot(pos[1] - c[1]), (x - c[0]).hypot(y - c[1]));
+                    assert!((r0 - r1).abs() < 1e-6 && (r0 - 10.0).abs() < 0.01, "r0 {r0} r1 {r1}");
+                    pos = [x, y, z];
+                    arcs_seen += 1;
+                }
+                Event::Section(_) => {}
+            }
+        }
+        assert!(arcs_seen >= 1);
+    }
+
+    #[test]
+    fn arc_preview_samples_lie_on_the_circle_and_time_is_close_to_the_line_version() {
+        let p = circle_program();
+        let mut o = Output::new(&POSTS[0]);
+        let t_lines = estimate_seconds(&p, &o);
+        let pv_lines = preview(&p, &o);
+        o.arcs = true;
+        let t_arcs = estimate_seconds(&p, &o);
+        let pv = preview(&p, &o);
+        for m in pv.chunks_exact(4).filter(|m| m[3] == 0.0 && m[2] == -1.0) {
+            assert!(((m[0] as f64).hypot(m[1] as f64) - 10.0).abs() < 0.02, "sample off the circle: {m:?}");
+        }
+        assert!(pv.len() >= pv_lines.len() / 2, "sampled arcs keep the preview dense enough to look round");
+        assert!((t_arcs - t_lines).abs() / t_lines < 0.05, "{t_arcs} vs {t_lines}");
     }
 
     #[test]

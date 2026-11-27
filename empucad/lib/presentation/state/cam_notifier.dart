@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/build_cam_operation.dart';
 import '../../application/footprint.dart';
+import '../../domain/cnc/tool_library.dart';
 import '../../domain/ports/cam_engine.dart';
 import 'editor_notifier.dart';
 import 'engine_providers.dart';
@@ -9,43 +11,50 @@ import 'selection_notifier.dart';
 final class CamState {
   const CamState({
     this.kind = CamOperationKind.profileOutside,
-    this.toolDiameter = 3.0,
+    this.toolId,
     this.depth = 3.0,
     this.stepDown = 1.0,
     this.tabCount = 0,
     this.tabWidth = 6.0,
     this.tabHeight = 1.0,
     this.rampLength = 0.0,
+    this.dogbones = false,
     this.settings = const CamSettings(),
     this.result = const AsyncData<CamResult?>(null),
   });
   final CamOperationKind kind;
-  final double toolDiameter, depth, stepDown, tabWidth, tabHeight, rampLength;
+
+  /// Library tool id; null means "the first tool that suits the operation".
+  final String? toolId;
+  final double depth, stepDown, tabWidth, tabHeight, rampLength;
   final int tabCount;
+  final bool dogbones;
   final CamSettings settings;
   final AsyncValue<CamResult?> result;
 
   CamState copyWith({
     CamOperationKind? kind,
-    double? toolDiameter,
+    String? toolId,
     double? depth,
     double? stepDown,
     int? tabCount,
     double? tabWidth,
     double? tabHeight,
     double? rampLength,
+    bool? dogbones,
     CamSettings? settings,
     AsyncValue<CamResult?>? result,
   }) =>
       CamState(
         kind: kind ?? this.kind,
-        toolDiameter: toolDiameter ?? this.toolDiameter,
+        toolId: toolId ?? this.toolId,
         depth: depth ?? this.depth,
         stepDown: stepDown ?? this.stepDown,
         tabCount: tabCount ?? this.tabCount,
         tabWidth: tabWidth ?? this.tabWidth,
         tabHeight: tabHeight ?? this.tabHeight,
         rampLength: rampLength ?? this.rampLength,
+        dogbones: dogbones ?? this.dogbones,
         settings: settings ?? this.settings,
         result: result ?? this.result,
       );
@@ -56,14 +65,16 @@ class CamNotifier extends Notifier<CamState> {
   CamState build() => const CamState();
 
   void setKind(CamOperationKind k) => state = state.copyWith(kind: k);
-  void setTool(double d) => state = state.copyWith(toolDiameter: d);
+  void setTool(String id) => state = state.copyWith(toolId: id);
   void setDepth(double d) => state = state.copyWith(depth: d);
   void setStepDown(double d) => state = state.copyWith(stepDown: d);
   void setTabCount(int n) => state = state.copyWith(tabCount: n);
   void setTabWidth(double v) => state = state.copyWith(tabWidth: v);
   void setTabHeight(double v) => state = state.copyWith(tabHeight: v);
+  void setDogbones(bool v) => state = state.copyWith(dogbones: v);
   void setRamp(double v) => state = state.copyWith(rampLength: v);
   void setPost(String id) => state = state.copyWith(settings: state.settings.copyWith(postId: id));
+  void setArcs(bool v) => state = state.copyWith(settings: state.settings.copyWith(arcs: v));
   void setInches(bool v) => state = state.copyWith(settings: state.settings.copyWith(inches: v));
 
   /// Generate toolpaths for the selection (or every solid shape when nothing is selected).
@@ -76,20 +87,24 @@ class CamNotifier extends Notifier<CamState> {
       return;
     }
     state = state.copyWith(result: const AsyncLoading<CamResult?>());
-    final isProfile = state.kind == CamOperationKind.profileOutside || state.kind == CamOperationKind.profileInside || state.kind == CamOperationKind.profileOn;
-    final op = CamOperation(
-      name: state.kind.name,
-      kind: state.kind,
-      shapes: shapes,
-      toolDiameter: state.toolDiameter,
-      depth: state.depth,
-      stepDown: state.stepDown,
-      tabCount: isProfile ? state.tabCount : 0,
-      tabWidth: state.tabWidth,
-      tabHeight: state.tabHeight,
-      rampLength: state.rampLength,
-    );
-    final result = await AsyncValue.guard<CamResult?>(() => ref.read(camEngineProvider).generate([op], state.settings));
+    final result = await AsyncValue.guard<CamResult?>(() {
+      final tool = ToolCompat.resolve(doc.tools, state.kind, state.toolId);
+      if (tool == null) throw const CamFailure('No tool in the library suits this operation. Add one.');
+      final op = BuildCamOperation.call(
+        kind: state.kind,
+        tool: tool,
+        toolNumber: doc.tools.numberOf(tool.id)!,
+        shapes: shapes,
+        depth: state.depth,
+        stepDown: state.stepDown,
+        tabCount: state.tabCount,
+        tabWidth: state.tabWidth,
+        tabHeight: state.tabHeight,
+        rampLength: state.rampLength,
+        dogbones: state.dogbones,
+      );
+      return ref.read(camEngineProvider).generate([op], state.settings);
+    });
     state = state.copyWith(result: result);
   }
 }

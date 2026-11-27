@@ -11,8 +11,8 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 
 | Part | State |
 |---|---|
-| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 59 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 49 tests (Dart 3.14.1) |
+| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 89 tests, `clippy` clean (Rust 1.89) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 140 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -28,6 +28,13 @@ The Dart tests were executed with a tiny stand-in for `package:test` (pub.dev un
 ./tool/bootstrap_engine.sh                    # one time: cargokit glue, pin versions, generate Dart bindings
 flutter run --enable-flutter-gpu              # GPU renderer (flutter_scene)
 flutter run --dart-define=EMPUCAD_RENDERER=canvas   # software fallback, no Flutter GPU needed
+```
+
+**After changing anything in `packages/empucad_engine/rust/src/api/`** (the bridge surface), regenerate the
+Dart and Rust glue, or the crate will not compile against the stale `frb_generated.rs`:
+
+```bash
+cd packages/empucad_engine && flutter_rust_bridge_codegen generate
 ```
 
 Engine only, no Flutter: `cd packages/empucad_engine/rust && cargo test --workspace`.
@@ -104,21 +111,87 @@ packages/empucad_engine/
 |---|---|
 | Shapes, groups, holes, union/intersect/bundle | done (`SceneEvaluator`) |
 | Undo/redo | done (`History`) |
-| Save/open | done, own `.empucad` JSON (DabbleCAD files are not imported yet) |
+| Save/open | done: own `.empucad` JSON; **DabbleCAD `.dabble` files open too** (see below) |
 | STL export | done |
 | CNC: profile, pocket, engrave, drill; 5 controller posts; time estimate | done (engine + panel) |
 | CNC: holding tabs, ramp entry | done (engine + CNC panel fields) |
-| Laser raster (grayscale / dither), depth-map style power | engine done and tested; **no UI yet** |
+| Laser image engraving (grayscale / dither / invert), depth-map style power | done (engine + laser workspace UI) |
 | SVG import to an extruded, editable node (`OutlineNode`) | done (engine, document, codec, CAM footprint, toolbar button, thickness field) |
-| Laser G-code planner | engine done and tested; **no UI yet** |
-| CNC: V-carve, helix entry, dogbones, tool library, GRBL simulator | not started |
+| Laser layers (line / fill, passes, power, overscan), per-shape layer assignment, bed check, G-code preview | done (engine, document, laser workspace UI) |
+| CNC: V-carve | done as a contour-parallel approximation (see below); not a medial-axis V-carve |
+| CNC tool library (end mill, ball nose, V-bit, drill; feed, plunge, rpm, angle; saved in the file) | done; operations only offer tools that suit them |
+| CNC: dogbone corners (inside profiles, pocket walls) | done; relief reaches exactly one tool radius from the true corner |
+| CNC: helix entry, GRBL simulator | not started (ramp entry covers most of what helix does) |
 | Text, STL import UI, mesh tools, align/mirror/array | not started |
-| Arc output (G2/G3) | not started (`cavalier_contours` is the candidate; offsets are polylines today) |
+| Arc output (G2/G3) | done as an opt-in fit: runs of short cuts on a circle become one arc (planar only, tolerance 0.005 mm); true arc-preserving offsets (`cavalier_contours`) are still future work |
+
+## Laser workspace
+
+Switch with the **Design / CNC / Laser** control in the app bar.
+
+* **Layers** (name, colour, line or fill, speed, power, passes, fill gap/angle, overscan, on/off) and the
+  **machine** (bed size, S max, M3/M4) are stored in the document, so they are saved and undoable.
+* Select shapes, open a layer, **Assign selection here**. A shape with no layer uses its group's layer,
+  else layer 1. Overlapping shapes in a fill layer merge instead of cancelling.
+* **Image engraving**: load a PNG/JPEG/etc., set size and bottom-left position, power range and mode.
+  The image (downscaled to at most 2000 px) and its settings are saved in the `.empucad` file, run-length
+  encoded, so they reopen with the design and are covered by undo.
+* Coordinates are machine coordinates everywhere (origin bottom-left, Y up): the Y that goes in is the Y
+  in the G-code. This is covered by Rust tests, because getting it wrong mirrors every burn.
+* A bed check warns when shapes or the image leave the bed.
+
+## Dogbones
+
+A round cutter cannot make a sharp inside corner; a 6 mm bit leaves 3 mm corner radii, so a square part
+will not fit. Switch on **Dogbone corners** for an inside profile or a pocket and the cutter runs out
+along each sharp corner's bisector and back, far enough that its edge reaches the true corner
+(`r / sin(angle / 2) - r` of extra travel: 0.41 r for a square corner). Rounded corners, reflex corners,
+very acute corners (under 20 degrees) and island corners are left alone; in a pocket only the wall pass
+gets them. Outside profiles ignore the setting.
+
+## Opening DabbleCAD files
+
+**Open…** accepts `.empucad` and DabbleCAD `.dabble` files and tells them apart by content. After a
+DabbleCAD import a dialog lists everything that did not carry across exactly.
+
+* **Imported:** box, cylinder, sphere and cone shapes; groups (union, intersect, bundle); holes; names;
+  colours; positions, rotations and sizes; laser layer settings for layers 1 to 5.
+* **Skipped and reported:** every other shape kind (roof, torus, text, mesh, ...), hidden shapes, laser
+  shapes and image-mode layers, laser layers 6 and up.
+* **Simplified and reported:** rounded boxes and bevels lose their rounding; few-sided cylinders (hexagonal
+  prisms) become round; cones with a flat top become pointed; stretched round shapes become circular.
+* **How sizes map:** DabbleCAD stores size as a scale in the node matrix. EmpuCAD stores size and placement
+  separately, so each matrix is decomposed. A group's scale is pushed into its children, which is exact
+  unless a rotated child sits in a non-uniformly scaled group (that case is detected and reported).
+* Verified by tests that compare the world-space corners of hundreds of random shapes and groups against
+  DabbleCAD's own matrix maths.
+
+## Tools
+
+The CNC panel picks a tool from the design's tool library (stored in the `.empucad` file; position in the
+list is the controller tool number, `T1`, `T2`, ...). Only tools that suit the chosen operation are
+offered: V-carve needs a V-bit, cutting out and pocketing need an end mill or ball nose, drilling needs a
+drill or end mill, and engraving takes anything but a drill. Edit a tool's diameter, angle, feed, plunge
+and spindle speed in place, or duplicate it for a new material.
+
+## V-carve
+
+Pick **V-carve** in the CNC panel, set the bit's included angle (e.g. 60 or 90 degrees) and its widest
+cut (Tool diameter). The groove deepens with the shape width so its top edge lands on the outline.
+
+* It is built from concentric inward offsets, each cut at the depth `distance / tan(angle / 2)`. Ring
+  spacing is capped at 0.5 mm (finish quality), regardless of bit size or stepover.
+* Depth is limited by your Depth setting and by the bit itself: a 2 mm bit at 90 degrees cannot cut
+  deeper than 1 mm, whatever you ask for.
+* **Approximation:** inner corners come out slightly rounded and there are fine ridges between rings,
+  unlike a true medial-axis V-carve. Shapes wider than the bit can reach are carved to the depth limit
+  and the middle is left uncut; clear it with a pocket pass.
 
 ## Known limits
 
 * **CAM footprints** are the base outline projected to XY: exact for shapes lying flat and for any Z rotation.
 * **Ungroup** supports groups rotated about Z only; a group tilted about X/Y is left unchanged.
+* **Laser** uses each shape's top-view footprint; layer colours are not drawn in the 3D viewport yet, and there is no text tool.
 * **Picking** is CPU ray-triangle per frame on click; fine for hundreds of thousands of triangles, not millions.
 * **`flutter_scene` is pre-1.0**; minor releases can break the API. Pin it and read its CHANGELOG.
 * The mobile save dialog is not implemented (`file_selector` has none); desktop and web only.
