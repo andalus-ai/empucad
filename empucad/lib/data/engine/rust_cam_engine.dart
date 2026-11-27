@@ -57,5 +57,6 @@ final class RustCamEngine implements CamEngine {
         tabWidth: o.tabWidth,
         tabHeight: o.tabHeight,
         rampLength: o.rampLength,
+        dogbones: o.dogbones,
       );
 }

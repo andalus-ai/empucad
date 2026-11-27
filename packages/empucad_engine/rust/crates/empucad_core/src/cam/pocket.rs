@@ -6,16 +6,25 @@ pub struct Pocket;
 impl Pocket {
     /// Concentric rings from the wall inward (tool-centre positions).
     pub fn rings(region: &Region, tool: &Tool, step_over: f64) -> Vec<(Vec<Pt>, bool)> {
+        Self::rings_with_wall(region, tool, step_over).0
+    }
+
+    /// Like [`Pocket::rings`], plus how many leading rings are the wall pass (the first offset).
+    pub fn rings_with_wall(region: &Region, tool: &Tool, step_over: f64) -> (Vec<(Vec<Pt>, bool)>, usize) {
         let step = (tool.diameter * step_over.clamp(0.05, 1.0)).max(1e-3);
         let mut cur = region.offset(-tool.radius());
         let mut out = Vec::new();
+        let mut wall = 0;
         let mut guard = 0;
         while !cur.is_empty() && guard < 10_000 {
             out.extend(cur.rings());
+            if guard == 0 {
+                wall = out.len();
+            }
             cur = cur.offset(-step);
             guard += 1;
         }
-        out
+        (out, wall)
     }
 }
 
@@ -23,7 +32,13 @@ impl ToolpathStrategy for Pocket {
     fn generate(&self, geo: &Geometry, tool: &Tool, cut: &CutParams) -> Vec<Path3> {
         let levels = depth_levels(cut.depth, cut.step_down);
         let climb = cut.direction == Direction::Climb;
-        let rings = Self::rings(&geo.region, tool, cut.step_over);
+        let (mut rings, wall) = Self::rings_with_wall(&geo.region, tool, cut.step_over);
+        if cut.dogbones {
+            // only the wall pass touches the pocket's own corners; islands' corners are the pocket's reflex ones
+            for (ring, _) in rings.iter_mut().take(wall).filter(|(_, hole)| !*hole) {
+                *ring = add_dogbones(ring, tool.radius());
+            }
+        }
         let mut out = Vec::new();
         for (li, &z) in levels.iter().enumerate() {
             let z_before = if li == 0 { 0.0 } else { levels[li - 1] };

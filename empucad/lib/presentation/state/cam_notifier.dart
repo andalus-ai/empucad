@@ -18,6 +18,7 @@ final class CamState {
     this.tabWidth = 6.0,
     this.tabHeight = 1.0,
     this.rampLength = 0.0,
+    this.dogbones = false,
     this.settings = const CamSettings(),
     this.result = const AsyncData<CamResult?>(null),
   });
@@ -27,6 +28,7 @@ final class CamState {
   final String? toolId;
   final double depth, stepDown, tabWidth, tabHeight, rampLength;
   final int tabCount;
+  final bool dogbones;
   final CamSettings settings;
   final AsyncValue<CamResult?> result;
 
@@ -39,6 +41,7 @@ final class CamState {
     double? tabWidth,
     double? tabHeight,
     double? rampLength,
+    bool? dogbones,
     CamSettings? settings,
     AsyncValue<CamResult?>? result,
   }) =>
@@ -51,6 +54,7 @@ final class CamState {
         tabWidth: tabWidth ?? this.tabWidth,
         tabHeight: tabHeight ?? this.tabHeight,
         rampLength: rampLength ?? this.rampLength,
+        dogbones: dogbones ?? this.dogbones,
         settings: settings ?? this.settings,
         result: result ?? this.result,
       );
@@ -67,6 +71,7 @@ class CamNotifier extends Notifier<CamState> {
   void setTabCount(int n) => state = state.copyWith(tabCount: n);
   void setTabWidth(double v) => state = state.copyWith(tabWidth: v);
   void setTabHeight(double v) => state = state.copyWith(tabHeight: v);
+  void setDogbones(bool v) => state = state.copyWith(dogbones: v);
   void setRamp(double v) => state = state.copyWith(rampLength: v);
   void setPost(String id) => state = state.copyWith(settings: state.settings.copyWith(postId: id));
   void setArcs(bool v) => state = state.copyWith(settings: state.settings.copyWith(arcs: v));
@@ -96,6 +101,7 @@ class CamNotifier extends Notifier<CamState> {
         tabWidth: state.tabWidth,
         tabHeight: state.tabHeight,
         rampLength: state.rampLength,
+        dogbones: state.dogbones,
       );
       return ref.read(camEngineProvider).generate([op], state.settings);
     });

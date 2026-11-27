@@ -12,6 +12,9 @@ abstract final class ToolCompat {
         CamOperationKind.vcarve => tool == CncToolKind.vBit,
       };
 
+  /// Dogbones only make sense where the cutter works inside a shape's corners.
+  static bool wantsDogbones(CamOperationKind op) => op == CamOperationKind.profileInside || op == CamOperationKind.pocket;
+
   /// The tool to use: [wanted] if it exists and suits [op], else the first library tool that does,
   /// else null (nothing in the library can do this operation).
   static CncTool? resolve(ToolLibrary lib, CamOperationKind op, String? wanted) {
@@ -46,6 +49,7 @@ abstract final class BuildCamOperation {
     double tabWidth = 6,
     double tabHeight = 1,
     double rampLength = 0,
+    bool dogbones = false,
   }) {
     if (!ToolCompat.allows(kind, tool.kind)) throw CamFailure(ToolCompat.reason(kind, tool));
     if (depth <= 0) throw const CamFailure('Depth must be greater than zero.');
@@ -71,6 +75,7 @@ abstract final class BuildCamOperation {
       tabWidth: tabWidth,
       tabHeight: tabHeight,
       rampLength: rampLength,
+      dogbones: dogbones && ToolCompat.wantsDogbones(kind),
     );
   }
 

@@ -53,6 +53,8 @@ pub struct OperationSpec {
     pub tab_height: f64,
     /// 0 = plunge straight down.
     pub ramp_length: f64,
+    /// Relief into sharp inside corners (inside profiles and pocket walls).
+    pub dogbones: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -142,6 +144,7 @@ pub fn generate_cam(job: CamJobSpec) -> Result<CamResult, EngineApiError> {
             direction: if op.climb { Direction::Climb } else { Direction::Conventional },
             tabs: (op.tab_count > 0).then_some(Tabs { count: op.tab_count, width: op.tab_width, height: op.tab_height }),
             ramp_length: op.ramp_length.max(0.0),
+            dogbones: op.dogbones,
         };
         sections.push(Section {
             name: op.name.clone(),
@@ -181,7 +184,7 @@ mod tests {
             operations: vec![OperationSpec {
                 name: "op".into(), tool_number: 1, tool_diameter: 3.0, tool_angle: 0.0, kind, shapes: vec![ShapeOutlines { outlines: vec![square()] }],
                 depth: 2.0, step_down: 1.0, step_over: 0.45, climb: true, feed: 800.0, plunge: 300.0, rpm: 12000.0,
-                tab_count: 0, tab_width: 0.0, tab_height: 0.0, ramp_length: 0.0,
+                tab_count: 0, tab_width: 0.0, tab_height: 0.0, ramp_length: 0.0, dogbones: false,
             }],
             post_id: "grbl".into(), inches: false, safe_z: 5.0, clear_z: 1.0, rapid_rate: 3000.0, arcs: false,
         }
@@ -291,6 +294,22 @@ mod tests {
         let mut e = job(ToolpathKind::Pocket);
         e.operations[0].tool_angle = 0.0;
         assert!(generate_cam(e).is_ok());
+    }
+
+    #[test]
+    fn dogbones_option_adds_relief_moves_to_an_inside_profile_only() {
+        let mut plain = job(ToolpathKind::ProfileInside);
+        plain.operations[0].tool_diameter = 6.0;
+        let base = generate_cam(plain.clone()).unwrap();
+        let mut bone = plain.clone();
+        bone.operations[0].dogbones = true;
+        let with = generate_cam(bone).unwrap();
+        assert!(with.preview.len() > base.preview.len(), "each of the 4 corners adds an out-and-back move per level");
+        // outside profile ignores the flag
+        let mut o = job(ToolpathKind::ProfileOutside);
+        let before = generate_cam(o.clone()).unwrap().gcode;
+        o.operations[0].dogbones = true;
+        assert_eq!(generate_cam(o).unwrap().gcode, before);
     }
 
     #[test]

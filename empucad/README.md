@@ -11,8 +11,8 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 
 | Part | State |
 |---|---|
-| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 81 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 139 tests (Dart 3.14.1) |
+| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 89 tests, `clippy` clean (Rust 1.89) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 140 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -120,7 +120,8 @@ packages/empucad_engine/
 | Laser layers (line / fill, passes, power, overscan), per-shape layer assignment, bed check, G-code preview | done (engine, document, laser workspace UI) |
 | CNC: V-carve | done as a contour-parallel approximation (see below); not a medial-axis V-carve |
 | CNC tool library (end mill, ball nose, V-bit, drill; feed, plunge, rpm, angle; saved in the file) | done; operations only offer tools that suit them |
-| CNC: helix entry, dogbones, GRBL simulator | not started |
+| CNC: dogbone corners (inside profiles, pocket walls) | done; relief reaches exactly one tool radius from the true corner |
+| CNC: helix entry, GRBL simulator | not started (ramp entry covers most of what helix does) |
 | Text, STL import UI, mesh tools, align/mirror/array | not started |
 | Arc output (G2/G3) | done as an opt-in fit: runs of short cuts on a circle become one arc (planar only, tolerance 0.005 mm); true arc-preserving offsets (`cavalier_contours`) are still future work |
 
@@ -138,6 +139,15 @@ Switch with the **Design / CNC / Laser** control in the app bar.
 * Coordinates are machine coordinates everywhere (origin bottom-left, Y up): the Y that goes in is the Y
   in the G-code. This is covered by Rust tests, because getting it wrong mirrors every burn.
 * A bed check warns when shapes or the image leave the bed.
+
+## Dogbones
+
+A round cutter cannot make a sharp inside corner; a 6 mm bit leaves 3 mm corner radii, so a square part
+will not fit. Switch on **Dogbone corners** for an inside profile or a pocket and the cutter runs out
+along each sharp corner's bisector and back, far enough that its edge reaches the true corner
+(`r / sin(angle / 2) - r` of extra travel: 0.41 r for a square corner). Rounded corners, reflex corners,
+very acute corners (under 20 degrees) and island corners are left alone; in a pocket only the wall pass
+gets them. Outside profiles ignore the setting.
 
 ## Opening DabbleCAD files
 

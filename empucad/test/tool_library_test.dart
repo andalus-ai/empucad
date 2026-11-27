@@ -131,6 +131,19 @@ void main() {
       expect(build(CamOperationKind.pocket, flat, tabs: 4).tabCount, 0, reason: 'tabs only apply to profiles');
     });
 
+    test('dogbones are kept for inside profiles and pockets and dropped everywhere else', () {
+      CamOperation op(CamOperationKind k, CncTool t) =>
+          BuildCamOperation.call(kind: k, tool: t, toolNumber: 1, shapes: shapes, dogbones: true);
+      expect(op(CamOperationKind.profileInside, flat).dogbones, isTrue);
+      expect(op(CamOperationKind.pocket, flat).dogbones, isTrue);
+      expect(op(CamOperationKind.profileOutside, flat).dogbones, isFalse);
+      expect(op(CamOperationKind.profileOn, flat).dogbones, isFalse);
+      expect(op(CamOperationKind.engrave, vbit).dogbones, isFalse);
+      expect(op(CamOperationKind.vcarve, vbit).dogbones, isFalse);
+      expect(op(CamOperationKind.drill, drill).dogbones, isFalse);
+      expect(BuildCamOperation.call(kind: CamOperationKind.pocket, tool: flat, toolNumber: 1, shapes: shapes).dogbones, isFalse, reason: 'off by default');
+    });
+
     test('non-positive depth or depth per pass is refused', () {
       expect(failure(() => build(CamOperationKind.pocket, flat, depth: 0)), contains('Depth'));
       expect(failure(() => BuildCamOperation.call(kind: CamOperationKind.pocket, tool: flat, toolNumber: 1, shapes: shapes, stepDown: 0)), contains('per pass'));

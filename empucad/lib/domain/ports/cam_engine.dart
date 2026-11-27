@@ -25,6 +25,7 @@ final class CamOperation {
     this.tabWidth = 6.0,
     this.tabHeight = 1.0,
     this.rampLength = 0.0,
+    this.dogbones = false,
   });
   final String name;
   final CamOperationKind kind;
@@ -41,6 +42,9 @@ final class CamOperation {
 
   /// Descend along the path over this length instead of plunging; 0 = plunge.
   final double rampLength;
+
+  /// Relief into sharp inside corners so a square part fits. Inside profiles and pocket walls only.
+  final bool dogbones;
   final bool climb;
 
   CamOperation copyWith({
@@ -54,6 +58,7 @@ final class CamOperation {
     double? tabWidth,
     double? tabHeight,
     double? rampLength,
+    bool? dogbones,
   }) =>
       CamOperation(
         name: name,
@@ -73,6 +78,7 @@ final class CamOperation {
         tabWidth: tabWidth ?? this.tabWidth,
         tabHeight: tabHeight ?? this.tabHeight,
         rampLength: rampLength ?? this.rampLength,
+        dogbones: dogbones ?? this.dogbones,
       );
 }
 

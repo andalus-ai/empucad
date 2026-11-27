@@ -73,6 +73,15 @@ class CamPanel extends ConsumerWidget {
             items: [for (final p in posts) DropdownMenuItem(value: p.id, child: Text(p.name))],
             onChanged: (v) => v == null ? null : n.setPost(v),
           ),
+        if (ToolCompat.wantsDogbones(cam.kind))
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Dogbone corners'),
+            subtitle: const Text('Relief so a square part fits the inside corners'),
+            value: cam.dogbones,
+            onChanged: n.setDogbones,
+          ),
         SwitchListTile(dense: true, contentPadding: EdgeInsets.zero, title: const Text('Arcs (G2/G3)'), subtitle: const Text('Smaller, smoother programs'), value: cam.settings.arcs, onChanged: n.setArcs),
         SwitchListTile(dense: true, contentPadding: EdgeInsets.zero, title: const Text('Inches'), value: cam.settings.inches, onChanged: n.setInches),
         FilledButton.icon(
