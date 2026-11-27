@@ -12,7 +12,7 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 | Part | State |
 |---|---|
 | Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 99 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 140 tests (Dart 3.14.1) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 144 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -140,6 +140,8 @@ Switch with the **Design / CNC / Laser** control in the app bar.
 * Coordinates are machine coordinates everywhere (origin bottom-left, Y up): the Y that goes in is the Y
   in the G-code. This is covered by Rust tests, because getting it wrong mirrors every burn.
 * A bed check warns when shapes or the image leave the bed.
+* In the Laser workspace the 3D viewport colours each shape by the layer it burns on (faded if that layer
+  is switched off), using the same rule as the job builder, so what you see is what gets planned.
 
 ## Program check
 
@@ -205,11 +207,19 @@ cut (Tool diameter). The groove deepens with the shape width so its top edge lan
   unlike a true medial-axis V-carve. Shapes wider than the bit can reach are carved to the depth limit
   and the middle is left uncut; clear it with a pocket pass.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs: the Rust tests and clippy; the pure-Dart tests and analyzer; a **bridge
+drift check** that regenerates `flutter_rust_bridge` output with the version pinned in `Cargo.toml` and
+fails if it differs from what is committed (the usual cause of a Rust crate that suddenly does not
+compile after an API edit); and `flutter analyze` plus the widget tests. The Flutter jobs have not run
+yet, and the widget-test step is allowed to fail until they have.
+
 ## Known limits
 
 * **CAM footprints** are the base outline projected to XY: exact for shapes lying flat and for any Z rotation.
 * **Ungroup** supports groups rotated about Z only; a group tilted about X/Y is left unchanged.
-* **Laser** uses each shape's top-view footprint; layer colours are not drawn in the 3D viewport yet, and there is no text tool.
+* **Laser** uses each shape's top-view footprint, and there is no text tool.
 * **Picking** is CPU ray-triangle per frame on click; fine for hundreds of thousands of triangles, not millions.
 * **`flutter_scene` is pre-1.0**; minor releases can break the API. Pin it and read its CHANGELOG.
 * The mobile save dialog is not implemented (`file_selector` has none); desktop and web only.

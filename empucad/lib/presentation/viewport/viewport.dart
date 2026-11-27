@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/laser_job_builder.dart';
 import '../../application/picking.dart';
 import '../state/editor_notifier.dart';
 import '../state/scene_providers.dart';
 import '../state/selection_notifier.dart';
+import '../state/workspace_notifier.dart';
 import 'flutter_scene_renderer.dart';
 import 'scene_renderer.dart';
 
@@ -33,6 +35,8 @@ class _ViewportState extends ConsumerState<Viewport> {
     final doc = ref.watch(documentProvider);
     final renderer = ref.watch(sceneRendererProvider);
     final panMode = ref.watch(panModeProvider);
+    // In the laser workspace shapes are coloured by the layer they burn on
+    final laserView = ref.watch(workspaceProvider) == Workspace.laser;
     // Keep showing the previous frame while a boolean recomputes.
     final result = scene.value;
     final items = result?.items ?? const [];
@@ -41,7 +45,7 @@ class _ViewportState extends ConsumerState<Viewport> {
       final size = box.biggest;
       final data = SceneRenderData(
         items: items,
-        colorOf: (id) => doc.find(id)?.color ?? 0xFF9CA3AF,
+        colorOf: (id) => (laserView ? LaserJobBuilder.viewColor(doc, id) : null) ?? doc.find(id)?.color ?? 0xFF9CA3AF,
         selected: selection,
         camera: camera,
       );
