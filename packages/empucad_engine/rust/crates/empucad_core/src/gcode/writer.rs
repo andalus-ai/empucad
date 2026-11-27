@@ -1,9 +1,15 @@
 use super::{expand_moves, Event, Output, Program, ToolChange};
 
-fn num(v: f64) -> String {
-    let s = format!("{v:.3}");
+/// Decimals for coordinates: 0.001 mm is plenty for millimetres, but 0.001 inch is 25 microns, so
+/// inch programs get four decimals like conventional inch posts.
+fn num_dp(v: f64, dp: usize) -> String {
+    let s = format!("{v:.dp$}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
     if s == "-0" || s.is_empty() { "0".into() } else { s.into() }
+}
+
+fn num(v: f64) -> String {
+    num_dp(v, 3)
 }
 
 struct Lines<'a> {
@@ -35,6 +41,7 @@ impl Lines<'_> {
 /// Render a program as G-code text for the given post-processor.
 pub fn write(program: &Program, o: &Output) -> String {
     let u = if o.inches { 1.0 / 25.4 } else { 1.0 };
+    let dp = if o.inches { 4 } else { 3 };
     let mut l = Lines { out: String::new(), n: 0, numbered: o.post.line_numbers, semi: o.post.semicolon_comments, _p: Default::default() };
     l.comment(&format!("EmpuCAD - {}", o.post.name));
     l.push(if o.inches { "G20" } else { "G21" });
@@ -70,13 +77,13 @@ pub fn write(program: &Program, o: &Output) -> String {
                 // arcs repeat their G code on every line: clearer, and safe on controllers that treat it as non-modal
                 let mut w = vec![format!("G{g}")];
                 last_g = Some(g);
-                w.push(format!("X{}", num(x * u)));
-                w.push(format!("Y{}", num(y * u)));
+                w.push(format!("X{}", num_dp(x * u, dp)));
+                w.push(format!("Y{}", num_dp(y * u, dp)));
                 if (last[2] - z).abs() > 1e-6 || last[2].is_nan() {
-                    w.push(format!("Z{}", num(z * u)));
+                    w.push(format!("Z{}", num_dp(z * u, dp)));
                 }
-                w.push(format!("I{}", num(i * u)));
-                w.push(format!("J{}", num(j * u)));
+                w.push(format!("I{}", num_dp(i * u, dp)));
+                w.push(format!("J{}", num_dp(j * u, dp)));
                 let f = (feed * u).round() as i64;
                 if last_f != Some(f) {
                     w.push(format!("F{f}"));
@@ -95,7 +102,7 @@ pub fn write(program: &Program, o: &Output) -> String {
                 for (axis, v, k) in [("X", x, 0), ("Y", y, 1), ("Z", Some(z), 2)] {
                     if let Some(v) = v {
                         if last[k].is_nan() || (last[k] - v).abs() > 1e-6 {
-                            w.push(format!("{axis}{}", num(v * u)));
+                            w.push(format!("{axis}{}", num_dp(v * u, dp)));
                             last[k] = v;
                         }
                     }
@@ -153,6 +160,6 @@ mod tests {
         o.inches = true;
         let g = write(&square_program(), &o);
         assert!(g.contains("G20"));
-        assert!(g.contains("X0.394"), "10 mm should print as 0.394 in");
+        assert!(g.contains("X0.3937"), "10 mm should print as 0.3937 in (four decimals for inches)");
     }
 }

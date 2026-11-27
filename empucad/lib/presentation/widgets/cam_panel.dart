@@ -113,7 +113,25 @@ class _Result extends ConsumerWidget {
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       ToolpathPreview(moves: result.preview),
       const SizedBox(height: 6),
-      Text('Estimated run time: $time', style: Theme.of(context).textTheme.bodySmall),
+      Text('Estimated run time: $time   Cutting ${(result.cutLength / 1000).toStringAsFixed(2)} m', style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 4),
+      if (result.warnings.isEmpty)
+        Row(children: [
+          const Icon(Icons.verified_outlined, size: 16, color: Colors.green),
+          const SizedBox(width: 6),
+          Expanded(child: Text('Program check passed', style: Theme.of(context).textTheme.bodySmall)),
+        ])
+      else
+        for (final w in result.warnings.take(5))
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.warning_amber, size: 16, color: Colors.amber),
+              const SizedBox(width: 6),
+              Expanded(child: Text(w, style: Theme.of(context).textTheme.bodySmall)),
+            ]),
+          ),
+      if (result.warnings.length > 5) Text('…and ${result.warnings.length - 5} more. Do not run this program until they are understood.', style: Theme.of(context).textTheme.bodySmall),
       const SizedBox(height: 6),
       OutlinedButton.icon(
         icon: const Icon(Icons.download),

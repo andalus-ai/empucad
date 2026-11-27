@@ -1,5 +1,6 @@
 use super::error::EngineApiError;
 use empucad_core::cam::*;
+use empucad_core::gcode::sim::{analyze, Limits};
 use empucad_core::gcode::{self, Output, Post, Program, Section};
 use empucad_core::geom2d::Region;
 use empucad_core::types::Polyline;
@@ -77,6 +78,11 @@ pub struct CamResult {
     pub seconds: f64,
     /// x, y, z, rapid(1|0) per move, for drawing the toolpath.
     pub preview: Vec<f32>,
+    /// Problems an independent re-read of the program found (e.g. a rapid into the stock). Empty = clean.
+    pub warnings: Vec<String>,
+    /// Total length of cutting moves and of rapids, mm.
+    pub cut_length: f64,
+    pub rapid_length: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -162,11 +168,18 @@ pub fn generate_cam(job: CamJobSpec) -> Result<CamResult, EngineApiError> {
     out.clear_z = job.clear_z;
     out.rapid_rate = job.rapid_rate;
     out.arcs = job.arcs;
+    let text = gcode::write(&program, &out);
+    // Re-read the finished text with an independent parser: stock depth is the deepest requested cut.
+    let stock = job.operations.iter().map(|o| o.depth).fold(0.0, f64::max);
+    let report = analyze(&text, &Limits { stock_thickness: Some(stock), rapid_rate: Some(job.rapid_rate), ..Default::default() });
     Ok(CamResult {
-        gcode: gcode::write(&program, &out),
         file_extension: post.ext.into(),
         seconds: gcode::estimate_seconds(&program, &out),
         preview: gcode::preview(&program, &out),
+        warnings: report.issues.iter().map(|i| format!("line {}: {}", i.line, i.message)).collect(),
+        cut_length: report.cut_length,
+        rapid_length: report.rapid_length,
+        gcode: text,
     })
 }
 
@@ -310,6 +323,94 @@ mod tests {
         let before = generate_cam(o.clone()).unwrap().gcode;
         o.operations[0].dogbones = true;
         assert_eq!(generate_cam(o).unwrap().gcode, before);
+    }
+
+    fn pts(v: &[(f64, f64)]) -> Vec<f64> {
+        v.iter().flat_map(|&(x, y)| [x, y]).collect()
+    }
+
+    fn circle(cx: f64, cy: f64, r: f64) -> Outline {
+        let p: Vec<(f64, f64)> = (0..64).map(|k| {
+            let a = 2.0 * std::f64::consts::PI * k as f64 / 64.0;
+            (cx + r * a.cos(), cy + r * a.sin())
+        }).collect();
+        Outline { points: pts(&p), closed: true }
+    }
+
+    /// Several different shapes: a square, a circle, an L (has a reflex corner) and a square with a hole.
+    fn shape_sets() -> Vec<Vec<ShapeOutlines>> {
+        let sq = |x: f64, y: f64, s: f64| Outline { points: pts(&[(x, y), (x + s, y), (x + s, y + s), (x, y + s)]), closed: true };
+        vec![
+            vec![ShapeOutlines { outlines: vec![sq(0., 0., 40.)] }],
+            vec![ShapeOutlines { outlines: vec![circle(20., 20., 15.)] }],
+            vec![ShapeOutlines { outlines: vec![Outline { points: pts(&[(0., 0.), (40., 0.), (40., 15.), (15., 15.), (15., 40.), (0., 40.)]), closed: true }] }],
+            vec![ShapeOutlines { outlines: vec![sq(0., 0., 40.), sq(12., 12., 16.)] }],
+        ]
+    }
+
+    /// The checker re-reads the finished G-code text with its own parser. Run it over every operation,
+    /// controller, unit system and option combination: any unsafe or inconsistent output fails here.
+    #[test]
+    fn every_generated_program_passes_the_independent_checker_and_its_time_matches() {
+        use ToolpathKind::*;
+        let kinds = [ProfileOutside, ProfileInside, ProfileOn, Pocket, Engrave, Drill, VCarve];
+        let mut runs = 0;
+        for shapes in shape_sets() {
+            for &kind in &kinds {
+                let profile = matches!(kind, ProfileOutside | ProfileInside | ProfileOn);
+                let inside = matches!(kind, ProfileInside | Pocket);
+                for post in ["grbl", "linuxcnc", "mach", "marlin", "generic"] {
+                    for inches in [false, true] {
+                        for arcs in [false, true] {
+                            for (tabs, ramp, bones) in [(0, 0.0, false), (4, 8.0, false), (0, 0.0, true), (3, 6.0, true)] {
+                                if (tabs > 0 && !profile) || (bones && !inside) {
+                                    continue; // those options do not apply to this operation
+                                }
+                                let mut j = job(kind);
+                                j.post_id = post.into();
+                                j.inches = inches;
+                                j.arcs = arcs;
+                                let op = &mut j.operations[0];
+                                op.shapes = shapes.clone();
+                                op.depth = 3.0;
+                                op.step_down = 1.0;
+                                op.tab_count = tabs;
+                                op.tab_width = 5.0;
+                                op.tab_height = 1.0;
+                                op.ramp_length = ramp;
+                                op.dogbones = bones;
+                                if matches!(kind, VCarve) {
+                                    op.tool_diameter = 6.0;
+                                    op.tool_angle = 60.0;
+                                    op.step_over = 0.1;
+                                }
+                                let r = generate_cam(j).unwrap_or_else(|e| panic!("{kind:?} {post} failed: {e:?}"));
+                                let ctx = format!("{kind:?} post={post} inches={inches} arcs={arcs} tabs={tabs} ramp={ramp} bones={bones}");
+                                assert!(r.warnings.is_empty(), "{ctx}: {:?}", r.warnings);
+                                assert!(r.cut_length > 0.0 && r.seconds > 0.0, "{ctx}");
+                                // independent time estimate: parsed from text vs the generator's own
+                                let sim = analyze(&r.gcode, &Limits { stock_thickness: Some(3.0), rapid_rate: Some(3000.0), ..Default::default() });
+                                let tol = if inches { 0.12 } else { 0.05 }; // inch feeds are printed as whole numbers
+                                assert!((sim.seconds - r.seconds).abs() / r.seconds < tol, "{ctx}: checker {:.1}s vs generator {:.1}s", sim.seconds, r.seconds);
+                                assert!(sim.bounds_min[2] >= -3.0 - 0.005 && sim.bounds_max[2] <= 5.0 + 0.005, "{ctx}: z range {:?}..{:?}", sim.bounds_min, sim.bounds_max);
+                                runs += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(runs >= 1000, "only ran {runs} combinations: the matrix shrank");
+    }
+
+    #[test]
+    fn the_checker_catches_a_corrupted_program_from_the_generator() {
+        let j = job(ToolpathKind::ProfileOutside);
+        let r = generate_cam(j).unwrap();
+        // a plausible bug: the safe retract is lost, so the next XY move is a rapid inside the stock
+        let broken = r.gcode.replacen("G0 Z5", "G0 Z-1", 2);
+        let report = analyze(&broken, &Limits { stock_thickness: Some(3.0), rapid_rate: Some(3000.0), ..Default::default() });
+        assert!(report.issues.iter().any(|i| i.message.contains("rapid")), "{:?}", report.issues);
     }
 
     #[test]

@@ -11,7 +11,7 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 
 | Part | State |
 |---|---|
-| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 89 tests, `clippy` clean (Rust 1.89) |
+| Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 99 tests, `clippy` clean (Rust 1.89) |
 | Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 140 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
@@ -121,7 +121,8 @@ packages/empucad_engine/
 | CNC: V-carve | done as a contour-parallel approximation (see below); not a medial-axis V-carve |
 | CNC tool library (end mill, ball nose, V-bit, drill; feed, plunge, rpm, angle; saved in the file) | done; operations only offer tools that suit them |
 | CNC: dogbone corners (inside profiles, pocket walls) | done; relief reaches exactly one tool radius from the true corner |
-| CNC: helix entry, GRBL simulator | not started (ramp entry covers most of what helix does) |
+| CNC program check (independent G-code re-reader) | done: every generated program is checked and the CNC panel shows the result |
+| CNC: helix entry, 3D G-code simulator | not started (ramp entry covers most of what helix does) |
 | Text, STL import UI, mesh tools, align/mirror/array | not started |
 | Arc output (G2/G3) | done as an opt-in fit: runs of short cuts on a circle become one arc (planar only, tolerance 0.005 mm); true arc-preserving offsets (`cavalier_contours`) are still future work |
 
@@ -139,6 +140,23 @@ Switch with the **Design / CNC / Laser** control in the app bar.
 * Coordinates are machine coordinates everywhere (origin bottom-left, Y up): the Y that goes in is the Y
   in the G-code. This is covered by Rust tests, because getting it wrong mirrors every burn.
 * A bed check warns when shapes or the image leave the bed.
+
+## Program check
+
+Every generated CNC program is re-read from its **text** by a separate G-code parser
+(`gcode::sim`) that replays the moves, including arcs, incremental mode, inches and comments. The CNC
+panel shows "Program check passed" or the problems found, such as:
+
+* a rapid (`G0`) move into the stock or sideways inside it,
+* cutting deeper than the stock, or below the surface with the spindle off,
+* an arc whose start and end are not the same distance from its centre (controllers alarm on this),
+* a feed move before any `F`, or an unsupported word (`R` arcs, cutter compensation, other planes).
+
+Because it parses only the text, it is also an independent test of the generator: a test runs it over
+1,040 combinations of operation, controller, units, arcs, tabs, ramps and dogbones on four different
+shapes and requires zero findings and a matching time estimate. That test found that inch programs
+printed only three decimals (0.001 in = 25 microns); they now use four, like conventional inch posts.
+It assumes the machine starts at the XY origin (the same convention as the time estimate).
 
 ## Dogbones
 

@@ -102,12 +102,27 @@ final class PostInfo {
 }
 
 final class CamResult {
-  const CamResult({required this.gcode, required this.fileExtension, required this.seconds, required this.preview});
+  const CamResult({
+    required this.gcode,
+    required this.fileExtension,
+    required this.seconds,
+    required this.preview,
+    this.warnings = const [],
+    this.cutLength = 0,
+    this.rapidLength = 0,
+  });
   final String gcode, fileExtension;
   final double seconds;
 
   /// x, y, z, rapid(1|0) per move, in mm.
   final Float32List preview;
+
+  /// Problems found when the finished program was re-read by an independent checker (for example a
+  /// rapid move into the stock). Empty means the program passed every check.
+  final List<String> warnings;
+
+  /// Total length of cutting moves and of rapid moves, mm.
+  final double cutLength, rapidLength;
 }
 
 final class CamFailure implements Exception {
