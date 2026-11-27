@@ -30,6 +30,9 @@ flutter run --enable-flutter-gpu              # GPU renderer (flutter_scene)
 flutter run --dart-define=EMPUCAD_RENDERER=canvas   # software fallback, no Flutter GPU needed
 ```
 
+The iOS/macOS plists and Android application manifest enable Flutter GPU for the default renderer.
+Use the Canvas command above on platforms or builds where Flutter GPU is unavailable.
+
 **After changing anything in `packages/empucad_engine/rust/src/api/`** (the bridge surface), regenerate the
 Dart and Rust glue, or the crate will not compile against the stale `frb_generated.rs`:
 
