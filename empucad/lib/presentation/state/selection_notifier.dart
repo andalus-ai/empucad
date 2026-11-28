@@ -26,6 +26,8 @@ class SelectionNotifier extends Notifier<Set<String>> {
     }
   }
 
+  void setAll(Iterable<String> ids) => state = Set.of(ids);
+
   void clear() => state = const {};
 }
 

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/arrange.dart';
 import '../../application/document_ops.dart';
 import '../../application/history.dart';
 import '../../domain/cnc/tool_library.dart';
@@ -77,6 +78,22 @@ class EditorNotifier extends Notifier<EditorState> {
   void updateLaserLayer(LaserLayerSettings l) => _commit(DocumentOps.updateLayer(_history.present, l));
   void resizeMesh(String id, {double? width, double? depth, double? height, required bool keepAspect}) =>
       _commit(DocumentOps.resizeMesh(_history.present, id, width: width, depth: depth, height: height, keepAspect: keepAspect));
+
+  /// Each returns the ids of the new copies (empty if nothing was created).
+  List<String> duplicate(Set<String> ids) => _arranged(Arrange.duplicate(_history.present, ids, nextId: _newId));
+  List<String> linearArray(Set<String> ids, {required int count, double dx = 0, double dy = 0, double dz = 0}) =>
+      _arranged(Arrange.linear(_history.present, ids, count: count, dx: dx, dy: dy, dz: dz, nextId: _newId));
+  List<String> gridArray(Set<String> ids, {required int rows, required int columns, required double dx, required double dy}) =>
+      _arranged(Arrange.grid(_history.present, ids, rows: rows, columns: columns, dx: dx, dy: dy, nextId: _newId));
+  List<String> circularArray(Set<String> ids, {required int count, required double cx, required double cy, double totalAngle = 360}) =>
+      _arranged(Arrange.circular(_history.present, ids, count: count, cx: cx, cy: cy, totalAngle: totalAngle, nextId: _newId));
+  void align(Set<String> ids, AlignMode mode) => _commit(Arrange.align(_history.present, ids, mode));
+
+  List<String> _arranged(ArrangeResult r) {
+    if (r.newIds.isEmpty) return const [];
+    _commit(r.document);
+    return r.newIds;
+  }
 
   void updateTool(CncTool t) => _commit(DocumentOps.updateTool(_history.present, t));
   void removeTool(String id) => _commit(DocumentOps.removeTool(_history.present, id));

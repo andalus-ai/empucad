@@ -12,7 +12,7 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 | Part | State |
 |---|---|
 | Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 99 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 165 tests (Dart 3.14.1) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 186 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -127,7 +127,8 @@ packages/empucad_engine/
 | CNC program check (independent G-code re-reader) | done: every generated program is checked and the CNC panel shows the result |
 | CNC: helix entry, 3D G-code simulator | not started (ramp entry covers most of what helix does) |
 | STL import (binary or ASCII) as a saved, movable mesh node | done: centred on the workplane, saved in the file, silhouette for CNC/laser |
-| Text, mesh repair/simplify, align/mirror/array | not started |
+| Duplicate (Ctrl/Cmd+D), arrays (row, grid, circle), align (edges, centres, bottoms, tops) | done |
+| Text, mesh repair/simplify, mirror | not started |
 | Arc output (G2/G3) | done as an opt-in fit: runs of short cuts on a circle become one arc (planar only, tolerance 0.005 mm); true arc-preserving offsets (`cavalier_contours`) are still future work |
 
 ## Laser workspace
@@ -163,6 +164,17 @@ Because it parses only the text, it is also an independent test of the generator
 shapes and requires zero findings and a matching time estimate. That test found that inch programs
 printed only three decimals (0.001 in = 25 microns); they now use four, like conventional inch posts.
 It assumes the machine starts at the XY origin (the same convention as the time estimate).
+
+## Editing: duplicate, arrays, align
+
+* **Duplicate** (Ctrl/Cmd+D) copies the selection 10 mm over. Copies get fresh ids throughout a group, and
+  keep their laser layer assignments.
+* **Array…** makes a row (step X/Y/Z), a grid (rows x columns, spacing) or a circle (centre, spread angle;
+  360 degrees spaces the original and the copies evenly). A circular copy is the original turned about the
+  centre, so tilted shapes stay correct. Capped at 500 new shapes per dialog.
+* **Align** lines the selection up by left/right/centre, front/back/centre or bottoms/tops, using each
+  node's real bounds (rotated shapes, groups, meshes and imported outlines included).
+* These work on the selected top-level nodes; shapes nested inside a group are ignored.
 
 ## Importing STL meshes
 

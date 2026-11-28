@@ -5,6 +5,7 @@ import 'package:flutter/material.dart' hide Viewport;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../application/arrange.dart';
 import '../../application/open_document.dart';
 import '../../data/codec/document_codec.dart';
 import '../../domain/entities/scene_node.dart';
@@ -16,6 +17,7 @@ import '../state/scene_providers.dart';
 import '../state/selection_notifier.dart';
 import '../state/workspace_notifier.dart';
 import '../viewport/viewport.dart';
+import '../widgets/array_dialog.dart';
 import '../widgets/cam_panel.dart';
 import '../widgets/inspector_panel.dart';
 import '../widgets/laser_panel.dart';
@@ -94,6 +96,26 @@ class EditorScreen extends ConsumerWidget {
       ToolButton(icon: Icons.undo, tooltip: 'Undo', onPressed: editor.canUndo ? ed.undo : null),
       ToolButton(icon: Icons.redo, tooltip: 'Redo', onPressed: editor.canRedo ? ed.redo : null),
       const VerticalDivider(width: 16),
+      ToolButton(icon: Icons.content_copy, tooltip: 'Duplicate (Ctrl+D)', onPressed: sel.isEmpty ? null : () => ref.read(selectionProvider.notifier).setAll(ed.duplicate(sel))),
+      ToolButton(icon: Icons.grid_view, tooltip: 'Array…', onPressed: sel.isEmpty ? null : () => showArrayDialog(context)),
+      PopupMenuButton<AlignMode>(
+        tooltip: 'Align the selection',
+        icon: const Icon(Icons.align_horizontal_left),
+        enabled: sel.length >= 2,
+        onSelected: (m) => ed.align(sel, m),
+        itemBuilder: (_) => const [
+          PopupMenuItem(value: AlignMode.left, child: Text('Left edges')),
+          PopupMenuItem(value: AlignMode.centerX, child: Text('Centres (left to right)')),
+          PopupMenuItem(value: AlignMode.right, child: Text('Right edges')),
+          PopupMenuDivider(),
+          PopupMenuItem(value: AlignMode.front, child: Text('Front edges')),
+          PopupMenuItem(value: AlignMode.centerY, child: Text('Centres (front to back)')),
+          PopupMenuItem(value: AlignMode.back, child: Text('Back edges')),
+          PopupMenuDivider(),
+          PopupMenuItem(value: AlignMode.base, child: Text('Bottoms')),
+          PopupMenuItem(value: AlignMode.top, child: Text('Tops')),
+        ],
+      ),
       ToolButton(icon: Icons.delete_outline, tooltip: 'Delete', onPressed: sel.isEmpty ? null : () => ed.delete(sel)),
       ToolButton(icon: Icons.join_full, tooltip: 'Group (union)', onPressed: sel.length < 2 ? null : () {
         final id = ed.group(sel);
@@ -112,6 +134,12 @@ class EditorScreen extends ConsumerWidget {
       bindings: {
         const SingleActivator(LogicalKeyboardKey.delete): () {
           if (sel.isNotEmpty) ed.delete(sel);
+        },
+        const SingleActivator(LogicalKeyboardKey.keyD, control: true): () {
+          if (sel.isNotEmpty) ref.read(selectionProvider.notifier).setAll(ed.duplicate(sel));
+        },
+        const SingleActivator(LogicalKeyboardKey.keyD, meta: true): () {
+          if (sel.isNotEmpty) ref.read(selectionProvider.notifier).setAll(ed.duplicate(sel));
         },
         const SingleActivator(LogicalKeyboardKey.keyZ, control: true): ed.undo,
         const SingleActivator(LogicalKeyboardKey.keyZ, control: true, shift: true): ed.redo,
