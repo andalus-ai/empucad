@@ -1,17 +1,11 @@
 import 'dart:typed_data';
 
 import '../../core/math/mat4.dart';
+import '../entities/mesh_data.dart';
 import '../entities/outline.dart';
-import '../entities/scene_node.dart';
 
-/// Indexed triangle mesh in millimetres, Z-up. Same layout the Rust engine uses.
-final class MeshData {
-  const MeshData(this.positions, this.indices);
-  final Float32List positions;
-  final Uint32List indices;
-  int get triangleCount => indices.length ~/ 3;
-  bool get isEmpty => indices.isEmpty;
-}
+export '../entities/mesh_data.dart';
+import '../entities/scene_node.dart';
 
 final class SolidReport {
   const SolidReport({required this.closed, required this.volume, required this.surfaceArea});

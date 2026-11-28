@@ -1,3 +1,4 @@
+import 'mesh_data.dart';
 import 'outline.dart';
 import 'placement.dart';
 
@@ -163,4 +164,51 @@ final class OutlineNode extends SceneNode {
 
   @override
   String get geometryKey => 'O($height,${placement.key},$isHole,$_fingerprint,${shapes.length})';
+}
+
+/// An imported mesh (e.g. from an STL file). The mesh is stored as imported, centred in X/Y with its base
+/// at z = 0; [placement] moves, rotates and (when decomposed from a file) positions it like any other node.
+final class MeshNode extends SceneNode {
+  MeshNode({
+    required super.id,
+    required super.name,
+    required this.mesh,
+    required this.meshHash,
+    super.placement = Placement.origin,
+    super.isHole = false,
+    super.color = 0xFF94A3B8,
+  });
+
+  /// Computes the content fingerprint once; edits that only move the node reuse it.
+  factory MeshNode.fromMesh({required String id, required String name, required MeshData mesh, Placement placement = Placement.origin, bool isHole = false, int color = 0xFF94A3B8}) =>
+      MeshNode(id: id, name: name, mesh: mesh, meshHash: hashMesh(mesh), placement: placement, isHole: isHole, color: color);
+
+  final MeshData mesh;
+
+  /// Fingerprint of the mesh content, so identical meshes share a cache entry and edited ones do not.
+  final int meshHash;
+
+  static int hashMesh(MeshData m) => Object.hash(m.positions.length, m.indices.length, Object.hashAll(m.positions), Object.hashAll(m.indices));
+
+  MeshNode copyWith({String? name, Placement? placement, bool? isHole, int? color}) => MeshNode(
+        id: id,
+        name: name ?? this.name,
+        mesh: mesh,
+        meshHash: meshHash,
+        placement: placement ?? this.placement,
+        isHole: isHole ?? this.isHole,
+        color: color ?? this.color,
+      );
+
+  @override
+  MeshNode withPlacement(Placement p) => copyWith(placement: p);
+  @override
+  MeshNode withName(String n) => copyWith(name: n);
+  @override
+  MeshNode withHole(bool h) => copyWith(isHole: h);
+  @override
+  MeshNode withColor(int c) => copyWith(color: c);
+
+  @override
+  String get geometryKey => 'M($meshHash,${mesh.triangleCount},${placement.key},$isHole)';
 }

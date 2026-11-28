@@ -76,6 +76,15 @@ class EditorScreen extends ConsumerWidget {
         ref.read(selectionProvider.notifier).select(node.id);
         ref.read(cameraProvider.notifier).frameScene(ref.read(sceneProvider).value);
       })),
+      ToolButton(icon: Icons.deployed_code_outlined, tooltip: 'Import STL…', onPressed: () => guarded(() async {
+        final bytes = await ref.read(importServiceProvider).pickBytes(extensions: const ['stl']);
+        if (bytes == null) return;
+        final r = await ref.read(importStlProvider)(bytes, id: ed.nextId());
+        ed.addNode(r.node);
+        ref.read(selectionProvider.notifier).select(r.node.id);
+        ref.read(cameraProvider.notifier).frameScene(ref.read(sceneProvider).value);
+        if (r.warnings.isNotEmpty && context.mounted) await _showImportNotes(context, r.warnings, title: 'Check this mesh');
+      })),
       ToolButton(icon: Icons.view_in_ar, tooltip: 'Export STL…', onPressed: doc.roots.isEmpty ? null : () => guarded(() async {
         final bytes = await ref.read(exportStlProvider)(doc);
         if (bytes == null) return snack('Nothing solid to export.');
@@ -173,10 +182,10 @@ class _Sidebar extends ConsumerWidget {
 }
 
 /// Lists what did not survive importing a DabbleCAD design, so nothing is lost silently.
-Future<void> _showImportNotes(BuildContext context, List<String> notes) => showDialog<void>(
+Future<void> _showImportNotes(BuildContext context, List<String> notes, {String title = 'Imported with some changes'}) => showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('Imported with some changes'),
+        title: Text(title),
         content: SizedBox(
           width: 460,
           child: SingleChildScrollView(

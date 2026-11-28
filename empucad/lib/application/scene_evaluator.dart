@@ -101,6 +101,9 @@ final class SceneEvaluator {
           _warnings.add('"${node.name}": ${e.message}. Skipped.');
           return const [];
         }
+      case MeshNode():
+        // the mesh already rests on z = 0 (centred in X/Y), so only the placement applies
+        return [_Part(node.id, await _engine.transform(node.mesh, node.placement.toMatrix()), node.isHole)];
       case GroupNode():
         final kids = <_Part>[];
         for (final c in node.children) {

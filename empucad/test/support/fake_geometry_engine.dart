@@ -36,6 +36,10 @@ final class FakeGeometryEngine implements GeometryEngine {
 
   int extrudeCalls = 0;
 
+  /// What `decodeStl` returns and what `inspect` reports (tests set these).
+  MeshData? stlResult;
+  SolidReport report = const SolidReport(closed: true, volume: 1, surfaceArea: 1);
+
   /// Extrudes the bounding box of the closed outlines (enough to check placement and plumbing).
   @override
   Future<MeshData> extrude(List<Outline> outlines, double height) async {
@@ -87,9 +91,9 @@ final class FakeGeometryEngine implements GeometryEngine {
   }
 
   @override
-  Future<SolidReport> inspect(MeshData mesh) async => const SolidReport(closed: true, volume: 0, surfaceArea: 0);
+  Future<SolidReport> inspect(MeshData mesh) async => report;
   @override
   Future<Uint8List> encodeStl(MeshData mesh) async => Uint8List(0);
   @override
-  Future<MeshData> decodeStl(Uint8List bytes) async => MeshData(Float32List(0), Uint32List(0));
+  Future<MeshData> decodeStl(Uint8List bytes) async => stlResult ?? MeshData(Float32List(0), Uint32List(0));
 }

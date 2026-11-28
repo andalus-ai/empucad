@@ -12,7 +12,7 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 | Part | State |
 |---|---|
 | Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 99 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 144 tests (Dart 3.14.1) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 156 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -123,7 +123,8 @@ packages/empucad_engine/
 | CNC: dogbone corners (inside profiles, pocket walls) | done; relief reaches exactly one tool radius from the true corner |
 | CNC program check (independent G-code re-reader) | done: every generated program is checked and the CNC panel shows the result |
 | CNC: helix entry, 3D G-code simulator | not started (ramp entry covers most of what helix does) |
-| Text, STL import UI, mesh tools, align/mirror/array | not started |
+| STL import (binary or ASCII) as a saved, movable mesh node | done: centred on the workplane, saved in the file, silhouette for CNC/laser |
+| Text, mesh repair/simplify, align/mirror/array | not started |
 | Arc output (G2/G3) | done as an opt-in fit: runs of short cuts on a circle become one arc (planar only, tolerance 0.005 mm); true arc-preserving offsets (`cavalier_contours`) are still future work |
 
 ## Laser workspace
@@ -159,6 +160,19 @@ Because it parses only the text, it is also an independent test of the generator
 shapes and requires zero findings and a matching time estimate. That test found that inch programs
 printed only three decimals (0.001 in = 25 microns); they now use four, like conventional inch posts.
 It assumes the machine starts at the XY origin (the same convention as the time estimate).
+
+## Importing STL meshes
+
+**Import STL…** adds the mesh as a node. It is centred in X and Y with its lowest point on the workplane
+(like every built-in shape), and can then be moved, rotated, coloured, grouped and exported. The mesh is
+stored in the `.empucad` file (little-endian float32/uint32, base64) and validated strictly on open: a
+corrupt file cannot produce out-of-range indices. Limit: 500,000 triangles.
+
+* A mesh that is **not a closed solid** still imports but with a warning, because boolean operations need
+  one; combining it with other shapes falls back to showing the parts separately.
+* For CNC and laser a mesh contributes its **top-view silhouette (convex hull)**, so a concave part is
+  covered by its hull.
+* Imported meshes cannot be resized in the inspector yet (position and rotation only).
 
 ## Dogbones
 
