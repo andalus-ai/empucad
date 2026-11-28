@@ -4,6 +4,7 @@
 //! simulator all consume its output.
 mod arcs;
 mod post;
+pub mod sim;
 mod writer;
 
 pub use arcs::{fit as fit_arcs, Seg};

@@ -7,6 +7,7 @@ import '../../domain/entities/placement.dart';
 import '../../domain/entities/scene_node.dart';
 import '../../domain/laser/laser_models.dart';
 import 'gray_codec.dart';
+import 'mesh_codec.dart';
 
 /// Versioned JSON for `.empucad` files. Decoding validates strictly and throws [FormatException]
 /// with a readable message, so a corrupt file never yields a half-built document.
@@ -217,6 +218,7 @@ abstract final class DocumentCodec {
           ],
           ...base,
         },
+      MeshNode() => {'type': 'mesh', 'mesh': MeshCodec.encode(n.mesh), 'scale': [n.sx, n.sy, n.sz], ...base},
       GroupNode() => {'type': 'group', 'op': n.op.name, 'children': [for (final c in n.children) _node(c)], ...base},
     };
   }
@@ -257,6 +259,12 @@ abstract final class DocumentCodec {
           shapes.add(ShapeOutlines(outlines));
         }
         return OutlineNode(id: id, name: name, shapes: shapes, height: h.toDouble(), placement: placement, isHole: hole, color: color);
+      case 'mesh':
+        final m = raw['mesh'];
+        if (m is! Map<String, dynamic>) throw FormatException('Mesh $id has no mesh data');
+        final sc = raw['scale'] == null ? const [1.0, 1.0, 1.0] : _nums(raw, 'scale', 3);
+        if (sc.any((v) => v <= 0)) throw FormatException('Mesh $id has a non-positive scale');
+        return MeshNode.fromMesh(id: id, name: name, mesh: MeshCodec.decode(m), sx: sc[0], sy: sc[1], sz: sc[2], placement: placement, isHole: hole, color: color);
       case 'group':
         final op = GroupOp.values.where((o) => o.name == raw['op']).firstOrNull ?? GroupOp.union;
         final kids = raw['children'];

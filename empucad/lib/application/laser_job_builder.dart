@@ -40,6 +40,23 @@ abstract final class LaserJobBuilder {
     );
   }
 
+  /// The laser layer a node burns on: its own assignment, else its nearest group's, else layer 0.
+  /// Returns null when [nodeId] is not in the document.
+  static int? layerOfNode(Document doc, String nodeId) {
+    final path = doc.idPathTo(nodeId);
+    return path.isEmpty ? null : _layerFor(path, doc.laser);
+  }
+
+  /// Colour to draw a node with while looking at laser layers: its layer's swatch, faded when that
+  /// layer is switched off. Null when the node does not exist.
+  static int? viewColor(Document doc, String nodeId) {
+    final idx = layerOfNode(doc, nodeId);
+    if (idx == null) return null;
+    final layer = doc.laser.layer(idx);
+    if (layer == null) return null;
+    return layer.enabled ? layer.color : (layer.color & 0x00FFFFFF) | 0x55000000;
+  }
+
   static int _layerFor(List<String> ids, LaserSetup setup) {
     for (final id in ids) {
       final l = setup.layerOf[id];

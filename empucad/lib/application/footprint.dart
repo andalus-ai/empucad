@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import '../core/math/mat4.dart';
 import '../domain/entities/document.dart';
 import '../domain/entities/scene_node.dart';
+import 'mesh_tools.dart';
 import '../domain/ports/cam_engine.dart';
 
 /// One design shape's top-view outlines plus the ids it came from: the leaf node first, then each
@@ -44,6 +45,18 @@ abstract final class Footprint {
                 ], closed: o.closed),
             ])));
           }
+        case MeshNode():
+          if (sel) {
+            // silhouette: the convex hull of every vertex seen from above (a concave mesh is covered by its hull)
+            final xy = <double>[];
+            final p = n.mesh.positions;
+            final world = m * Mat4.scaling(n.sx, n.sy, n.sz);
+            for (var i = 0; i + 2 < p.length; i += 3) {
+              xy.addAll(_xy(world, p[i].toDouble(), p[i + 1].toDouble(), p[i + 2].toDouble()));
+            }
+            final hull = MeshTools.convexHull(xy);
+            if (hull.length >= 6) out.add(FootprintEntry([n.id, ...ancestors], ShapeOutlines([Outline(hull)])));
+          }
         case GroupNode():
           for (final c in n.children) {
             walk(c, m, sel, [n.id, ...ancestors]);
@@ -57,8 +70,8 @@ abstract final class Footprint {
     return out;
   }
 
-  static List<double> _xy(Mat4 m, double x, double y) {
-    final p = m.transformPoint(x, y, 0);
+  static List<double> _xy(Mat4 m, double x, double y, [double z = 0]) {
+    final p = m.transformPoint(x, y, z);
     return [p.x, p.y];
   }
 

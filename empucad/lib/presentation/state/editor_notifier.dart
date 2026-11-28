@@ -75,6 +75,9 @@ class EditorNotifier extends Notifier<EditorState> {
 
   void assignLaserLayer(Set<String> ids, int layer) => _commit(DocumentOps.assignLayer(_history.present, ids, layer));
   void updateLaserLayer(LaserLayerSettings l) => _commit(DocumentOps.updateLayer(_history.present, l));
+  void resizeMesh(String id, {double? width, double? depth, double? height, required bool keepAspect}) =>
+      _commit(DocumentOps.resizeMesh(_history.present, id, width: width, depth: depth, height: height, keepAspect: keepAspect));
+
   void updateTool(CncTool t) => _commit(DocumentOps.updateTool(_history.present, t));
   void removeTool(String id) => _commit(DocumentOps.removeTool(_history.present, id));
 
@@ -127,3 +130,13 @@ final editorProvider = NotifierProvider<EditorNotifier, EditorState>(EditorNotif
 
 /// Just the document, so widgets that only need geometry don't rebuild on undo/redo flags.
 final documentProvider = Provider<Document>((ref) => ref.watch(editorProvider.select((s) => s.document)));
+
+/// Whether resizing an imported mesh keeps its proportions. On by default: distorting a model by accident
+/// is harder to notice and undo than choosing to stretch it.
+class KeepProportionsNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+  void set(bool v) => state = v;
+}
+
+final keepProportionsProvider = NotifierProvider<KeepProportionsNotifier, bool>(KeepProportionsNotifier.new);

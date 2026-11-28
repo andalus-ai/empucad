@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../application/export_stl.dart';
+import '../../application/import_stl.dart';
 import '../../application/import_svg.dart';
 import '../../data/engine/rust_svg_importer.dart';
 import '../../domain/ports/svg_importer.dart';
@@ -22,3 +23,5 @@ final exportStlProvider = Provider<ExportStl>((ref) => ExportStl(ref.watch(evalu
 final svgImporterProvider = Provider<SvgImporter>((ref) => const RustSvgImporter());
 
 final importSvgProvider = Provider<ImportSvg>((ref) => ImportSvg(ref.watch(svgImporterProvider)));
+
+final importStlProvider = Provider<ImportStl>((ref) => ImportStl(ref.watch(engineProvider)));

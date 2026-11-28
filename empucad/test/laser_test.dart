@@ -17,6 +17,7 @@ ShapeNode box(String id, {double x = 10, double y = 10}) =>
     ShapeNode(id: id, name: id, kind: ShapeKind.box, width: 20, depth: 20, height: 5, placement: Placement(x: x, y: y));
 
 void main() {
+  layerColourTests();
   group('layer resolution', () {
     test('a node burns on its own layer, else its group\'s, else layer 0', () {
       final g = GroupNode(id: 'g', name: 'g', children: [box('a'), box('b', x: 100)]);
@@ -174,5 +175,51 @@ void main() {
       expect(() => Grayscale.fromRgba(Uint8List(7), 2, 1), throwsA(isA<ArgumentError>()));
       expect(() => RasterImage(width: 2, height: 2, gray: Uint8List(3)), throwsA(isA<ArgumentError>()));
     });
+  });
+}
+
+void layerColourTests() {
+  group('laser layer colours', () {
+    final cut = LaserSetup.defaultLayers[0].color, score = LaserSetup.defaultLayers[1].color, engrave = LaserSetup.defaultLayers[2].color;
+
+    test('a node takes its own layer, else its group\'s, else layer 1', () {
+      final g = GroupNode(id: 'g', name: 'g', children: [box('a'), box('b', x: 100)]);
+      var d = Document(roots: [g, box('c', x: 200)]);
+      d = DocumentOps.assignLayer(d, {'g'}, 2);
+      d = DocumentOps.assignLayer(d, {'b'}, 1);
+      expect(LaserJobBuilder.viewColor(d, 'a'), engrave, reason: 'inherits the group');
+      expect(LaserJobBuilder.viewColor(d, 'b'), score, reason: 'own assignment wins');
+      expect(LaserJobBuilder.viewColor(d, 'g'), engrave, reason: 'a boolean result is drawn under the group id');
+      expect(LaserJobBuilder.viewColor(d, 'c'), cut, reason: 'default layer');
+      expect([for (final id in ['a', 'b', 'g', 'c']) LaserJobBuilder.layerOfNode(d, id)], [2, 1, 2, 0]);
+    });
+
+    test('a switched-off layer is faded but keeps its hue; unknown nodes have no colour', () {
+      var d = Document(roots: [box('a')]);
+      d = DocumentOps.updateLayer(d, d.laser.layer(0)!.copyWith(enabled: false));
+      final c = LaserJobBuilder.viewColor(d, 'a')!;
+      expect(c & 0x00FFFFFF, cut & 0x00FFFFFF);
+      expect(c >> 24, lessThan(0xFF));
+      expect(LaserJobBuilder.viewColor(d, 'nope'), isNull);
+      expect(LaserJobBuilder.layerOfNode(d, 'nope'), isNull);
+    });
+
+    test('the view and the job agree: whatever colour a shape shows is the layer it is planned on', () {
+      var d = Document(roots: [box('a'), GroupNode(id: 'g', name: 'g', children: [box('b', x: 100), box('c', x: 200)])]);
+      d = DocumentOps.assignLayer(d, {'a'}, 3);
+      d = DocumentOps.assignLayer(d, {'g'}, 4);
+      final plan = LaserJobBuilder.build(d);
+      expect(plan.shapes.map((s) => s.layer), [3, 4, 4]);
+      expect([LaserJobBuilder.layerOfNode(d, 'a'), LaserJobBuilder.layerOfNode(d, 'b'), LaserJobBuilder.layerOfNode(d, 'c')], [3, 4, 4]);
+    });
+  });
+
+  test('idPathTo lists the node then its ancestors, and is empty for a missing id', () {
+    final inner = GroupNode(id: 'in', name: 'in', children: [box('leaf')]);
+    final d = Document(roots: [GroupNode(id: 'out', name: 'out', children: [inner]), box('x')]);
+    expect(d.idPathTo('leaf'), ['leaf', 'in', 'out']);
+    expect(d.idPathTo('out'), ['out']);
+    expect(d.idPathTo('x'), ['x']);
+    expect(d.idPathTo('missing'), isEmpty);
   });
 }

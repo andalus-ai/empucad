@@ -101,6 +101,9 @@ final class SceneEvaluator {
           _warnings.add('"${node.name}": ${e.message}. Skipped.');
           return const [];
         }
+      case MeshNode():
+        // the mesh rests on z = 0 (centred in X/Y); scaling about that origin keeps it on the workplane
+        return [_Part(node.id, await _engine.transform(node.mesh, node.placement.toMatrix() * Mat4.scaling(node.sx, node.sy, node.sz)), node.isHole)];
       case GroupNode():
         final kids = <_Part>[];
         for (final c in node.children) {

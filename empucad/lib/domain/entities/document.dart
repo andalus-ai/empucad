@@ -26,6 +26,22 @@ final class Document {
     return null;
   }
 
+  /// Ids from the node with [id] up to its outermost group (leaf first). Empty if there is no such node.
+  List<String> idPathTo(String id) {
+    List<String>? walk(List<SceneNode> nodes) {
+      for (final n in nodes) {
+        if (n.id == id) return [n.id];
+        if (n is GroupNode) {
+          final inner = walk(n.children);
+          if (inner != null) return [...inner, n.id];
+        }
+      }
+      return null;
+    }
+
+    return walk(roots) ?? const [];
+  }
+
   /// Every node, depth first.
   Iterable<SceneNode> get allNodes sync* {
     Iterable<SceneNode> walk(List<SceneNode> ns) sync* {

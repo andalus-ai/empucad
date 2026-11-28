@@ -25,7 +25,15 @@ final class RustCamEngine implements CamEngine {
           arcs: s.arcs,
         ),
       );
-      return CamResult(gcode: r.gcode, fileExtension: r.fileExtension, seconds: r.seconds, preview: r.preview);
+      return CamResult(
+        gcode: r.gcode,
+        fileExtension: r.fileExtension,
+        seconds: r.seconds,
+        preview: r.preview,
+        warnings: r.warnings,
+        cutLength: r.cutLength,
+        rapidLength: r.rapidLength,
+      );
     } on rust.EngineApiError catch (e) {
       throw CamFailure(e.detail);
     }

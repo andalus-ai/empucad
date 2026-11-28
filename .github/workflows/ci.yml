@@ -22,3 +22,46 @@ jobs:
           printf 'name: empucad\nenvironment:\n  sdk: ^3.9.0\ndev_dependencies:\n  test: ^1.25.0\n' > pubspec.yaml
           rm -f test/widget_test.dart; rm -rf lib/presentation/state lib/presentation/widgets lib/presentation/screens lib/presentation/viewport/*renderer.dart lib/presentation/viewport/viewport.dart lib/data/engine lib/data/image lib/data/storage/file_selector_export_service.dart lib/main.dart lib/app.dart
           dart pub get && dart analyze lib test && dart test
+  bridge-drift:
+    # The generated bridge (frb_generated.rs + Dart bindings) must match rust/src/api/**. If someone edits the
+    # API and forgets to regenerate, the Rust crate stops compiling; this job says so with a clear message.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y cmake
+      - name: Install the codegen at the version pinned in Cargo.toml
+        run: |
+          FRB=$(grep -oP 'flutter_rust_bridge = "=\K[^"]+' packages/empucad_engine/rust/Cargo.toml)
+          echo "flutter_rust_bridge $FRB"
+          cargo install flutter_rust_bridge_codegen --version "$FRB" --locked
+      - name: Regenerate and compare
+        working-directory: packages/empucad_engine
+        run: |
+          flutter pub get
+          flutter_rust_bridge_codegen generate
+          if ! git diff --exit-code -- . ; then
+            echo "::error::Generated bridge code is out of date. Run: cd packages/empucad_engine && flutter_rust_bridge_codegen generate"
+            exit 1
+          fi
+  flutter-app:
+    # Analyze and run the widget tests. Needs the generated bridge to be current (see bridge-drift).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - uses: dtolnay/rust-toolchain@stable
+      - run: sudo apt-get update && sudo apt-get install -y cmake
+      - run: flutter pub get
+        working-directory: empucad
+      - run: flutter analyze
+        working-directory: empucad
+      - run: flutter test
+        working-directory: empucad
+        # flutter_scene and the native-assets build have not been exercised in CI yet; do not block on them
+        continue-on-error: true

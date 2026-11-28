@@ -100,4 +100,8 @@ abstract final class DocumentOps {
   /// The last tool cannot be removed: a job always needs one.
   static Document removeTool(Document d, String id) =>
       d.tools.tools.length <= 1 ? d : d.copyWith(tools: d.tools.copyWith(tools: [for (final t in d.tools.tools) if (t.id != id) t]));
+
+  /// Resizes an imported mesh. No-op for other node kinds or an unknown id.
+  static Document resizeMesh(Document d, String id, {double? width, double? depth, double? height, bool keepAspect = false}) =>
+      d.updateNode(id, (n) => n is MeshNode ? n.resized(width: width, depth: depth, height: height, keepAspect: keepAspect) : n);
 }

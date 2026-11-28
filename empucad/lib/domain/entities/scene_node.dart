@@ -1,3 +1,4 @@
+import 'mesh_data.dart';
 import 'outline.dart';
 import 'placement.dart';
 
@@ -163,4 +164,113 @@ final class OutlineNode extends SceneNode {
 
   @override
   String get geometryKey => 'O($height,${placement.key},$isHole,$_fingerprint,${shapes.length})';
+}
+
+/// An imported mesh (e.g. from an STL file). The mesh is stored as imported, centred in X/Y with its base
+/// at z = 0. The node scales it by ([sx], [sy], [sz]) about that origin, then places it with [placement],
+/// so resizing never lifts it off the workplane.
+final class MeshNode extends SceneNode {
+  MeshNode({
+    required super.id,
+    required super.name,
+    required this.mesh,
+    required this.meshHash,
+    required this.meshWidth,
+    required this.meshDepth,
+    required this.meshHeight,
+    this.sx = 1,
+    this.sy = 1,
+    this.sz = 1,
+    super.placement = Placement.origin,
+    super.isHole = false,
+    super.color = 0xFF94A3B8,
+  });
+
+  /// Computes the content fingerprint and size once; edits that only move or resize the node reuse them.
+  factory MeshNode.fromMesh({
+    required String id,
+    required String name,
+    required MeshData mesh,
+    double sx = 1,
+    double sy = 1,
+    double sz = 1,
+    Placement placement = Placement.origin,
+    bool isHole = false,
+    int color = 0xFF94A3B8,
+  }) {
+    var lo = [double.infinity, double.infinity, double.infinity], hi = [-double.infinity, -double.infinity, -double.infinity];
+    final p = mesh.positions;
+    for (var i = 0; i + 2 < p.length; i += 3) {
+      for (var k = 0; k < 3; k++) {
+        if (p[i + k] < lo[k]) lo[k] = p[i + k];
+        if (p[i + k] > hi[k]) hi[k] = p[i + k];
+      }
+    }
+    final empty = p.length < 3;
+    return MeshNode(
+      id: id, name: name, mesh: mesh, meshHash: hashMesh(mesh),
+      meshWidth: empty ? 0 : hi[0] - lo[0], meshDepth: empty ? 0 : hi[1] - lo[1], meshHeight: empty ? 0 : hi[2] - lo[2],
+      sx: sx, sy: sy, sz: sz, placement: placement, isHole: isHole, color: color,
+    );
+  }
+
+  final MeshData mesh;
+
+  /// Fingerprint of the mesh content, so identical meshes share a cache entry and edited ones do not.
+  final int meshHash;
+
+  /// Size of the mesh as imported, before scaling.
+  final double meshWidth, meshDepth, meshHeight;
+
+  /// Scale factors along the mesh's own X, Y and Z.
+  final double sx, sy, sz;
+
+  /// Size as it appears in the design.
+  double get width => meshWidth * sx;
+  double get depth => meshDepth * sy;
+  double get height => meshHeight * sz;
+
+  static int hashMesh(MeshData m) => Object.hash(m.positions.length, m.indices.length, Object.hashAll(m.positions), Object.hashAll(m.indices));
+
+  /// Resize to the given dimensions in mm. With [keepAspect] the first dimension given decides one factor
+  /// that is applied to all three axes; otherwise each given dimension scales only its own axis. An axis the
+  /// mesh has no extent along (a perfectly flat mesh) cannot be scaled and is left alone.
+  MeshNode resized({double? width, double? depth, double? height, bool keepAspect = false}) {
+    double factor(double? target, double current) => target != null && target > 0 && target.isFinite && current > 1e-9 ? target / current : double.nan;
+    final fx = factor(width, meshWidth), fy = factor(depth, meshDepth), fz = factor(height, meshHeight);
+    if (keepAspect) {
+      final f = [fx, fy, fz].firstWhere((v) => !v.isNaN, orElse: () => double.nan);
+      if (f.isNaN) return this;
+      return copyWith(sx: f, sy: f, sz: f);
+    }
+    return copyWith(sx: fx.isNaN ? sx : fx, sy: fy.isNaN ? sy : fy, sz: fz.isNaN ? sz : fz);
+  }
+
+  MeshNode copyWith({String? name, Placement? placement, bool? isHole, int? color, double? sx, double? sy, double? sz}) => MeshNode(
+        id: id,
+        name: name ?? this.name,
+        mesh: mesh,
+        meshHash: meshHash,
+        meshWidth: meshWidth,
+        meshDepth: meshDepth,
+        meshHeight: meshHeight,
+        sx: sx ?? this.sx,
+        sy: sy ?? this.sy,
+        sz: sz ?? this.sz,
+        placement: placement ?? this.placement,
+        isHole: isHole ?? this.isHole,
+        color: color ?? this.color,
+      );
+
+  @override
+  MeshNode withPlacement(Placement p) => copyWith(placement: p);
+  @override
+  MeshNode withName(String n) => copyWith(name: n);
+  @override
+  MeshNode withHole(bool h) => copyWith(isHole: h);
+  @override
+  MeshNode withColor(int c) => copyWith(color: c);
+
+  @override
+  String get geometryKey => 'M($meshHash,${mesh.triangleCount},$sx,$sy,$sz,${placement.key},$isHole)';
 }
