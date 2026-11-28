@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:empucad/application/document_ops.dart';
 import 'package:empucad/application/footprint.dart';
 import 'package:empucad/application/import_stl.dart';
 import 'package:empucad/application/mesh_tools.dart';
@@ -184,6 +185,93 @@ void main() {
       final broken = text.replaceFirst('"triangles": 1', '"triangles": 5');
       expect(broken == text, isFalse);
       expect(() => DocumentCodec.decode(broken), throwsA(isA<FormatException>()));
+    });
+  });
+
+  group('resizing an imported mesh', () {
+    late MeshNode node; // 10 x 20 x 30
+    setUp(() async {
+      node = MeshNode.fromMesh(id: 'm', name: 'M', mesh: MeshTools.restOnWorkplane(await offsetBox(engine)));
+    });
+
+    test('its size is the mesh size times the scale', () {
+      expect([node.width, node.depth, node.height], [10, 20, 30]);
+      final r = node.resized(width: 25);
+      expect([r.sx, r.sy, r.sz], [2.5, 1, 1]);
+      expect([r.width, r.depth, r.height], [25, 20, 30]);
+    });
+
+    test('keep proportions scales every axis by the one factor the edited dimension implies', () {
+      final r = node.resized(height: 15, keepAspect: true);
+      expect([r.sx, r.sy, r.sz], [0.5, 0.5, 0.5]);
+      expect([r.width, r.depth, r.height], [5, 10, 15]);
+      final w = node.resized(depth: 40, keepAspect: true);
+      expect([w.width, w.depth, w.height], [20, 40, 60]);
+    });
+
+    test('bad targets change nothing: zero, negative, NaN, infinite, or no target at all', () {
+      for (final bad in [0.0, -5.0, double.nan, double.infinity]) {
+        expect(node.resized(width: bad).sx, 1, reason: '$bad');
+        expect(node.resized(width: bad, keepAspect: true).sx, 1, reason: '$bad (keep aspect)');
+      }
+      expect(node.resized().sx, 1);
+    });
+
+    test('a perfectly flat mesh cannot be scaled along its empty axis', () async {
+      final flat = MeshNode.fromMesh(id: 'f', name: 'f', mesh: MeshData(Float32List.fromList([0, 0, 0, 4, 0, 0, 0, 4, 0]), Uint32List.fromList([0, 1, 2])));
+      expect(flat.height, 0);
+      expect(flat.resized(height: 10).sz, 1, reason: 'nothing to stretch');
+      expect(flat.resized(width: 8).width, 8);
+    });
+
+    test('scale is part of the cache key, resizing keeps the fingerprint, and moving keeps the scale', () {
+      final r = node.resized(width: 20);
+      expect(r.geometryKey == node.geometryKey, isFalse);
+      expect(r.meshHash, node.meshHash);
+      expect((r.withPlacement(const Placement(x: 3))).sx, 2);
+    });
+
+    test('the evaluator scales about the base centre: it stays on the workplane and grows in place', () async {
+      final big = node.resized(width: 20, depth: 40, height: 60).withPlacement(const Placement(x: 100, y: 0, z: 5));
+      final r = await SceneEvaluator(engine).evaluate(Document(roots: [big]));
+      final b = bounds(r.items.single.mesh);
+      expect([b[0], b[3]], [90, 110]);
+      expect([b[1], b[4]], [-20, 20]);
+      expect([b[2], b[5]], [5, 65], reason: 'the base is still at the placement height');
+    });
+
+    test('the footprint follows the scale', () {
+      final fp = Footprint.of(Document(roots: [node.resized(width: 30, depth: 10)])).single.outlines.single;
+      final xs = [for (var i = 0; i < fp.points.length; i += 2) fp.points[i]];
+      final ys = [for (var i = 0; i < fp.points.length; i += 2) fp.points[i + 1]];
+      expect([xs.reduce((a, b) => a < b ? a : b), xs.reduce((a, b) => a > b ? a : b)], [-15, 15]);
+      expect([ys.reduce((a, b) => a < b ? a : b), ys.reduce((a, b) => a > b ? a : b)], [-5, 5]);
+    });
+
+    test('DocumentOps.resizeMesh edits a nested mesh and ignores other nodes', () {
+      var d = Document(roots: [GroupNode(id: 'g', name: 'g', children: [node]), ShapeNode(id: 's', name: 's', kind: ShapeKind.box, width: 5, depth: 5, height: 5)]);
+      d = DocumentOps.resizeMesh(d, 'm', width: 50, keepAspect: true);
+      expect((d.find('m') as MeshNode).height, 150);
+      final before = d;
+      d = DocumentOps.resizeMesh(d, 's', width: 99);
+      expect((d.find('s') as ShapeNode).width, 5, reason: 'not a mesh: untouched');
+      expect(identical(DocumentOps.resizeMesh(before, 'nope', width: 1).roots, before.roots), isFalse, reason: 'copy, but equal content');
+    });
+
+    test('scale survives save and open; older files default to 1; bad scales are rejected', () {
+      final r = node.resized(width: 25, depth: 10, height: 90);
+      final back = DocumentCodec.decode(DocumentCodec.encode(Document(roots: [r]))).roots.single as MeshNode;
+      expect([back.sx, back.sy, back.sz], [r.sx, r.sy, r.sz]);
+      expect([back.width, back.depth, back.height], [r.width, r.depth, r.height]);
+      expect(back.geometryKey, r.geometryKey);
+
+      final text = DocumentCodec.encode(Document(roots: [node]));
+      final noScale = (jsonDecode(text) as Map<String, dynamic>)..['nodes'] = [for (final n in (jsonDecode(text) as Map)['nodes'] as List) (Map<String, dynamic>.of(n as Map<String, dynamic>)..remove('scale'))];
+      expect((DocumentCodec.decode(jsonEncode(noScale)).roots.single as MeshNode).sx, 1);
+      for (final bad in ['[0,1,1]', '[1,-2,1]', '[1,1]', '"x"']) {
+        final broken = text.replaceFirst(RegExp(r'"scale": \[[^\]]*\]'), '"scale": $bad');
+        expect(() => DocumentCodec.decode(broken), throwsA(isA<FormatException>()), reason: bad);
+      }
     });
   });
 }

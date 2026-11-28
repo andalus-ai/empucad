@@ -50,8 +50,9 @@ abstract final class Footprint {
             // silhouette: the convex hull of every vertex seen from above (a concave mesh is covered by its hull)
             final xy = <double>[];
             final p = n.mesh.positions;
+            final world = m * Mat4.scaling(n.sx, n.sy, n.sz);
             for (var i = 0; i + 2 < p.length; i += 3) {
-              xy.addAll(_xy(m, p[i].toDouble(), p[i + 1].toDouble(), p[i + 2].toDouble()));
+              xy.addAll(_xy(world, p[i].toDouble(), p[i + 1].toDouble(), p[i + 2].toDouble()));
             }
             final hull = MeshTools.convexHull(xy);
             if (hull.length >= 6) out.add(FootprintEntry([n.id, ...ancestors], ShapeOutlines([Outline(hull)])));

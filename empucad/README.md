@@ -12,7 +12,7 @@ the app**) + `flutter_scene` for drawing + a Rust FFI plugin (`flutter_rust_brid
 | Part | State |
 |---|---|
 | Rust engine (`packages/empucad_engine/rust`) | **Built and tested here**: 99 tests, `clippy` clean (Rust 1.89) |
-| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 156 tests (Dart 3.14.1) |
+| Pure-Dart layers (`core`, `domain`, `application`, `data/codec`, camera) | **Analyzed and tested here**: `dart analyze` clean, 165 tests (Dart 3.14.1) |
 | Rust to Dart bridge (`flutter_rust_bridge` codegen) | **Not run.** Needs Flutter; run `tool/bootstrap_engine.sh` |
 | `data/engine/*` Rust adapters | **Type-checked** against a hand-written stub of the API codegen should produce (not against real generated code) |
 | `presentation/*` (Riverpod, widgets, renderers), `main.dart` | **Written, never compiled.** pub.dev and the Flutter SDK were unreachable where this was built. Expect a round of small compile fixes. |
@@ -175,7 +175,9 @@ corrupt file cannot produce out-of-range indices. Limit: 500,000 triangles.
   one; combining it with other shapes falls back to showing the parts separately.
 * For CNC and laser a mesh contributes its **top-view silhouette (convex hull)**, so a concave part is
   covered by its hull.
-* Imported meshes cannot be resized in the inspector yet (position and rotation only).
+* **Resize** in the inspector (width, depth, height). "Keep proportions" is on by default: editing one
+  dimension scales all three. Scaling is about the mesh's base centre, so it stays on the workplane. A
+  perfectly flat mesh cannot be stretched along its empty axis.
 
 ## Dogbones
 

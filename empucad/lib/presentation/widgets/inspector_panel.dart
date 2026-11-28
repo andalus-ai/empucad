@@ -23,6 +23,7 @@ class InspectorPanel extends ConsumerWidget {
       );
     }
     final ed = ref.read(editorProvider.notifier);
+    final keep = ref.watch(keepProportionsProvider);
     final p = node.placement;
     Widget row(List<Widget> children) => Padding(
           padding: const EdgeInsets.only(bottom: 8),
@@ -45,6 +46,20 @@ class InspectorPanel extends ConsumerWidget {
           else
             row([NumberField(label: 'Diameter', value: node.width, min: 0.01, onCommit: (v) => ed.resize(node.id, width: v))]),
           row([NumberField(label: 'Height', value: node.height, min: 0.01, onCommit: (v) => ed.resize(node.id, height: v))]),
+        ],
+        if (node is MeshNode) ...[
+          row([
+            NumberField(label: 'Width', value: node.width, min: 0.01, onCommit: (v) => ed.resizeMesh(node.id, width: v, keepAspect: keep)),
+            NumberField(label: 'Depth', value: node.depth, min: 0.01, onCommit: (v) => ed.resizeMesh(node.id, depth: v, keepAspect: keep)),
+            NumberField(label: 'Height', value: node.height, min: 0.01, onCommit: (v) => ed.resizeMesh(node.id, height: v, keepAspect: keep)),
+          ]),
+          SwitchListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Keep proportions'),
+            value: keep,
+            onChanged: ref.read(keepProportionsProvider.notifier).set,
+          ),
         ],
         if (node is OutlineNode)
           row([NumberField(label: 'Thickness', value: node.height, min: 0.01, onCommit: (v) => ed.setOutlineHeight(node.id, v))]),
